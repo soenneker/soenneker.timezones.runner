@@ -4,7 +4,7 @@ public sealed record RunnerOptions
 {
     public string Scope { get; init; } = "world";
 
-    public string ExtractUrl { get; init; } = "https://download.geofabrik.de/north-america/us-latest.osm.pbf";
+    public string ExtractUrl { get; init; } = "https://planet.openstreetmap.org/pbf/planet-latest.osm.pbf";
 
     public string? ExtractListPath { get; init; }
 

@@ -13,6 +13,7 @@ using Soenneker.Utils.Directory.Abstract;
 using Soenneker.Utils.Environment;
 using Soenneker.Utils.File.Abstract;
 using Soenneker.Utils.File.Download.Abstract;
+using Soenneker.Utils.Path.Abstract;
 
 namespace Soenneker.TimeZones.Runner;
 
@@ -22,15 +23,17 @@ public sealed class TimeZonesRunner
     private readonly IGitUtil _gitUtil;
     private readonly IFileUtil _fileUtil;
     private readonly IDirectoryUtil _directoryUtil;
+    private readonly IPathUtil _pathUtil;
     private readonly ILogger<TimeZonesRunner> _logger;
 
-    public TimeZonesRunner(IFileDownloadUtil fileDownloadUtil, IGitUtil gitUtil, IFileUtil fileUtil, IDirectoryUtil directoryUtil,
+    public TimeZonesRunner(IFileDownloadUtil fileDownloadUtil, IGitUtil gitUtil, IFileUtil fileUtil, IDirectoryUtil directoryUtil, IPathUtil pathUtil,
         ILogger<TimeZonesRunner> logger)
     {
         _fileDownloadUtil = fileDownloadUtil;
         _gitUtil = gitUtil;
         _fileUtil = fileUtil;
         _directoryUtil = directoryUtil;
+        _pathUtil = pathUtil;
         _logger = logger;
     }
 
@@ -40,7 +43,9 @@ public sealed class TimeZonesRunner
         RunnerOptions options = RunnerOptionsParser.Parse(args);
         string runnerRepoRoot = await FindRunnerRepositoryRoot(cancellationToken);
         string cacheDirectory = ResolvePath(runnerRepoRoot, options.CacheDirectory);
-        string generatedOutputPath = Path.Combine(runnerRepoRoot, "artifacts", "timezones", "timezones.geojson");
+        string generatedOutputDirectory = Path.Combine(runnerRepoRoot, "artifacts", "timezones");
+        await _directoryUtil.Create(generatedOutputDirectory, cancellationToken: cancellationToken);
+        string generatedOutputPath = await _pathUtil.GetRandomUniqueFilePath(generatedOutputDirectory, ".geojson", cancellationToken);
         string gitHubToken = EnvironmentUtil.GetVariableStrict("GH__TOKEN");
         string gitName = EnvironmentUtil.GetVariableStrict("GIT__NAME");
         string gitEmail = EnvironmentUtil.GetVariableStrict("GIT__EMAIL");
@@ -86,7 +91,8 @@ public sealed class TimeZonesRunner
 
             _logger.LogInformation(
                 "Processing extract {ExtractName}. Url: {ExtractUrl}. Cache path: {CachePath}. Upstream MD5: {UpstreamMd5}. MD5 changed: {Md5Changed}. Download: {DownloadStatus}",
-                extract.Name, extract.Url, cachePath, upstreamMd5s[extract.CacheFileName], md5Changed, downloaded ? "performed" : "skipped, reused cached file");
+                extract.Name, extract.Url, cachePath, upstreamMd5s[extract.CacheFileName], md5Changed,
+                downloaded ? "performed" : "skipped, reused cached file");
 
             ExtractStats extractStats = extractor.Extract(extract, cachePath, options, globalPaths) with
             {
@@ -105,8 +111,9 @@ public sealed class TimeZonesRunner
 
         List<TimeZoneFeature> features = BuildFeatures(globalPaths, options.MinRingPoints);
         TimeZoneDatasetValidator.Validate(features, options.MinRingPoints);
-        await TimeZoneGeoJsonWriter.Write(generatedOutputPath, features, _fileUtil, _directoryUtil, cancellationToken);
-        await PushToDataRepository(dataRepositoryDirectory, targetPath, generatedOutputPath, extracts, upstreamMd5s, gitHubToken, gitName, gitEmail, cancellationToken);
+        await TimeZoneGeoJsonWriter.Write(generatedOutputPath, features, _fileUtil, _directoryUtil, _pathUtil, cancellationToken);
+        await PushToDataRepository(dataRepositoryDirectory, targetPath, generatedOutputPath, extracts, upstreamMd5s, gitHubToken, gitName, gitEmail,
+            cancellationToken);
 
         stats.GlobalTimezoneFeatureCount = features.Count;
         stopwatch.Stop();
@@ -123,8 +130,9 @@ public sealed class TimeZonesRunner
         return await _gitUtil.CloneToTempDirectory(Constants.DataRepositoryUri, gitHubToken, cancellationToken);
     }
 
-    private async ValueTask PushToDataRepository(string dataRepositoryDirectory, string targetPath, string generatedOutputPath, IReadOnlyList<ExtractDefinition> extracts,
-        IReadOnlyDictionary<string, string> upstreamMd5s, string gitHubToken, string gitName, string gitEmail, CancellationToken cancellationToken)
+    private async ValueTask PushToDataRepository(string dataRepositoryDirectory, string targetPath, string generatedOutputPath,
+        IReadOnlyList<ExtractDefinition> extracts, IReadOnlyDictionary<string, string> upstreamMd5s, string gitHubToken, string gitName, string gitEmail,
+        CancellationToken cancellationToken)
     {
         string? targetDirectory = Path.GetDirectoryName(targetPath);
 
@@ -152,7 +160,7 @@ public sealed class TimeZonesRunner
 
         await _fileUtil.DeleteIfExists(cachePath, cancellationToken: cancellationToken);
 
-        string? result = await _fileDownloadUtil.DownloadAsStream(extract.Url, cachePath, cancellationToken: cancellationToken);
+        string? result = await _fileDownloadUtil.DownloadAsStream(extract.Url, cachePath, log: true, cancellationToken: cancellationToken);
 
         if (result is null)
             throw new InvalidOperationException($"Failed to download extract '{extract.Name}' from {extract.Url}.");
@@ -176,11 +184,12 @@ public sealed class TimeZonesRunner
     private async ValueTask<string> DownloadExtractMd5(ExtractDefinition extract, CancellationToken cancellationToken)
     {
         string md5Url = extract.Url + ".md5";
-        string tempPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.md5");
+        string tempPath = await _pathUtil.GetRandomTempFilePath(".md5", cancellationToken);
 
         try
         {
-            string? downloadedPath = await _fileDownloadUtil.DownloadWithRetry(md5Url, tempPath, null, null, null, 3, 2.0, cancellationToken);
+            string? downloadedPath =
+                await _fileDownloadUtil.DownloadWithRetry(md5Url, tempPath, null, null, null, 3, 2.0, cancellationToken: cancellationToken);
 
             if (downloadedPath is null)
                 throw new InvalidOperationException($"Failed to download MD5 for extract '{extract.Name}' from {md5Url}.");
@@ -233,14 +242,12 @@ public sealed class TimeZonesRunner
         var manifest = new ExtractChecksumManifest
         {
             Extracts = extracts.Select(x => new ExtractChecksum
-                       {
-                           Name = x.Name,
-                           Url = x.Url,
-                           CacheFileName = x.CacheFileName,
-                           Md5 = upstreamMd5s[x.CacheFileName]
-                       })
-                      .OrderBy(static x => x.Name, StringComparer.Ordinal)
-                      .ToList()
+            {
+                Name = x.Name,
+                Url = x.Url,
+                CacheFileName = x.CacheFileName,
+                Md5 = upstreamMd5s[x.CacheFileName]
+            }).OrderBy(static x => x.Name, StringComparer.Ordinal).ToList()
         };
 
         await using FileStream stream = _fileUtil.OpenWrite(path);
@@ -263,8 +270,7 @@ public sealed class TimeZonesRunner
     {
         string upstreamMd5 = upstreamMd5s[extract.CacheFileName];
         ExtractChecksum? previous = previousChecksums.Extracts.FirstOrDefault(x =>
-            string.Equals(x.CacheFileName, extract.CacheFileName, StringComparison.Ordinal) &&
-            string.Equals(x.Url, extract.Url, StringComparison.Ordinal));
+            string.Equals(x.CacheFileName, extract.CacheFileName, StringComparison.Ordinal) && string.Equals(x.Url, extract.Url, StringComparison.Ordinal));
 
         return previous is null || !string.Equals(previous.Md5, upstreamMd5, StringComparison.OrdinalIgnoreCase);
     }
@@ -294,8 +300,9 @@ public sealed class TimeZonesRunner
         {
             string path = ResolvePath(repoRoot, options.ExtractListPath);
             await using FileStream stream = _fileUtil.OpenRead(path);
-            ExtractManifest? manifest = await JsonSerializer.DeserializeAsync<ExtractManifest>(stream, new JsonSerializerOptions { PropertyNameCaseInsensitive = true },
-                cancellationToken);
+            ExtractManifest? manifest =
+                await JsonSerializer.DeserializeAsync<ExtractManifest>(stream, new JsonSerializerOptions { PropertyNameCaseInsensitive = true },
+                    cancellationToken);
             return manifest ?? throw new InvalidOperationException($"Extract manifest '{path}' could not be read.");
         }
 
@@ -332,7 +339,8 @@ public sealed class TimeZonesRunner
         return "extract.osm.pbf";
     }
 
-    private static string ResolvePath(string repoRoot, string path) => Path.IsPathRooted(path) ? Path.GetFullPath(path) : Path.GetFullPath(Path.Combine(repoRoot, path));
+    private static string ResolvePath(string repoRoot, string path) =>
+        Path.IsPathRooted(path) ? Path.GetFullPath(path) : Path.GetFullPath(Path.Combine(repoRoot, path));
 
     private static string ResolveDataRepositoryPath(string dataRepositoryDirectory, string outputPath)
     {
@@ -377,5 +385,4 @@ public sealed class TimeZonesRunner
 
         return null;
     }
-
 }

@@ -3,6 +3,7 @@ using Soenneker.Git.Util.Registrars;
 using Soenneker.Utils.Directory.Registrars;
 using Soenneker.Utils.File.Download.Registrars;
 using Soenneker.Utils.File.Registrars;
+using Soenneker.Utils.Path.Registrars;
 
 namespace Soenneker.TimeZones.Runner;
 
@@ -23,7 +24,8 @@ public static class Startup
                 .AddFileDownloadUtilAsSingleton()
                 .AddGitUtilAsSingleton()
                 .AddFileUtilAsSingleton()
-                .AddDirectoryUtilAsSingleton();
+                .AddDirectoryUtilAsSingleton()
+                .AddPathUtilAsSingleton();
 
         return services;
     }

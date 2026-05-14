@@ -3,20 +3,23 @@ using System.Text.Json;
 using Soenneker.TimeZones.Runner.Models;
 using Soenneker.Utils.Directory.Abstract;
 using Soenneker.Utils.File.Abstract;
+using Soenneker.Utils.Path.Abstract;
 
 namespace Soenneker.TimeZones.Runner.GeoJson;
 
 public static class TimeZoneGeoJsonWriter
 {
     public static async Task Write(string outputPath, IReadOnlyList<TimeZoneFeature> features, IFileUtil fileUtil, IDirectoryUtil directoryUtil,
-        CancellationToken cancellationToken)
+        IPathUtil pathUtil, CancellationToken cancellationToken)
     {
         string? directory = Path.GetDirectoryName(outputPath);
 
         if (!string.IsNullOrWhiteSpace(directory))
             await directoryUtil.Create(directory, cancellationToken: cancellationToken);
 
-        string tempPath = outputPath + ".tmp";
+        string tempPath = !string.IsNullOrWhiteSpace(directory)
+            ? await pathUtil.GetRandomUniqueFilePath(directory, ".tmp", cancellationToken)
+            : await pathUtil.GetRandomTempFilePath(".tmp", cancellationToken);
 
         await using (FileStream stream = fileUtil.OpenWrite(tempPath))
         {
