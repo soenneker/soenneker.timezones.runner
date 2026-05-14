@@ -3,27 +3,34 @@ using System.Text.Json;
 using Clipper2Lib;
 using Microsoft.Extensions.Logging;
 using Soenneker.Git.Util.Abstract;
-using Soenneker.TimeZones.Runner.Abstract;
 using Soenneker.TimeZones.Runner.Configuration;
 using Soenneker.TimeZones.Runner.GeoJson;
 using Soenneker.TimeZones.Runner.Geometry;
 using Soenneker.TimeZones.Runner.Models;
 using Soenneker.TimeZones.Runner.Osm;
 using Soenneker.TimeZones.Runner.Validation;
+using Soenneker.Utils.Directory.Abstract;
+using Soenneker.Utils.Environment;
+using Soenneker.Utils.File.Abstract;
 using Soenneker.Utils.File.Download.Abstract;
 
 namespace Soenneker.TimeZones.Runner;
 
-public sealed class TimeZonesRunner : ITimeZonesRunner
+public sealed class TimeZonesRunner
 {
     private readonly IFileDownloadUtil _fileDownloadUtil;
     private readonly IGitUtil _gitUtil;
+    private readonly IFileUtil _fileUtil;
+    private readonly IDirectoryUtil _directoryUtil;
     private readonly ILogger<TimeZonesRunner> _logger;
 
-    public TimeZonesRunner(IFileDownloadUtil fileDownloadUtil, IGitUtil gitUtil, ILogger<TimeZonesRunner> logger)
+    public TimeZonesRunner(IFileDownloadUtil fileDownloadUtil, IGitUtil gitUtil, IFileUtil fileUtil, IDirectoryUtil directoryUtil,
+        ILogger<TimeZonesRunner> logger)
     {
         _fileDownloadUtil = fileDownloadUtil;
         _gitUtil = gitUtil;
+        _fileUtil = fileUtil;
+        _directoryUtil = directoryUtil;
         _logger = logger;
     }
 
@@ -31,12 +38,12 @@ public sealed class TimeZonesRunner : ITimeZonesRunner
     {
         var stopwatch = Stopwatch.StartNew();
         RunnerOptions options = RunnerOptionsParser.Parse(args);
-        string runnerRepoRoot = FindRunnerRepositoryRoot();
+        string runnerRepoRoot = await FindRunnerRepositoryRoot(cancellationToken);
         string cacheDirectory = ResolvePath(runnerRepoRoot, options.CacheDirectory);
         string generatedOutputPath = Path.Combine(runnerRepoRoot, "artifacts", "timezones", "timezones.geojson");
-        string gitHubToken = GetRequiredEnvironmentVariable("GH__TOKEN");
-        string gitName = GetRequiredEnvironmentVariable("GIT__NAME");
-        string gitEmail = GetRequiredEnvironmentVariable("GIT__EMAIL");
+        string gitHubToken = EnvironmentUtil.GetVariableStrict("GH__TOKEN");
+        string gitName = EnvironmentUtil.GetVariableStrict("GIT__NAME");
+        string gitEmail = EnvironmentUtil.GetVariableStrict("GIT__EMAIL");
 
         ExtractManifest manifest = await LoadManifest(options, runnerRepoRoot, cancellationToken);
         List<ExtractDefinition> extracts = manifest.Extracts.Where(static x => x.Enabled).OrderBy(static x => x.Name, StringComparer.Ordinal).ToList();
@@ -44,7 +51,7 @@ public sealed class TimeZonesRunner : ITimeZonesRunner
         if (extracts.Count == 0)
             throw new InvalidOperationException("No enabled extracts are configured.");
 
-        var extractor = new OsmTimeZoneExtractor();
+        var extractor = new OsmTimeZoneExtractor(_fileUtil);
         var globalPaths = new Dictionary<string, Paths64>(StringComparer.Ordinal);
         var stats = new GenerationStats { ExtractsConfigured = manifest.Extracts.Count };
 
@@ -53,14 +60,14 @@ public sealed class TimeZonesRunner : ITimeZonesRunner
         _logger.LogInformation("Generated output path: {GeneratedOutputPath}", generatedOutputPath);
         _logger.LogInformation("Data repository output path: {DataRepositoryOutputPath}", options.OutputPath);
 
-        Directory.CreateDirectory(cacheDirectory);
+        await _directoryUtil.Create(cacheDirectory, cancellationToken: cancellationToken);
 
         string dataRepositoryDirectory = await CloneDataRepository(gitHubToken, cancellationToken);
         string targetPath = ResolveDataRepositoryPath(dataRepositoryDirectory, options.OutputPath);
         ExtractChecksumManifest previousChecksums = await LoadPreviousChecksums(dataRepositoryDirectory, cancellationToken);
         Dictionary<string, string> upstreamMd5s = await LoadUpstreamMd5s(extracts, cancellationToken);
 
-        if (!options.ForceDownload && File.Exists(targetPath) && ExtractChecksumsMatch(extracts, upstreamMd5s, previousChecksums))
+        if (!options.ForceDownload && await _fileUtil.Exists(targetPath, cancellationToken) && ExtractChecksumsMatch(extracts, upstreamMd5s, previousChecksums))
         {
             _logger.LogInformation("All configured extract MD5s match the data repository checksum manifest; skipping PBF downloads and generation.");
             return;
@@ -98,7 +105,7 @@ public sealed class TimeZonesRunner : ITimeZonesRunner
 
         List<TimeZoneFeature> features = BuildFeatures(globalPaths, options.MinRingPoints);
         TimeZoneDatasetValidator.Validate(features, options.MinRingPoints);
-        await TimeZoneGeoJsonWriter.Write(generatedOutputPath, features, cancellationToken);
+        await TimeZoneGeoJsonWriter.Write(generatedOutputPath, features, _fileUtil, _directoryUtil, cancellationToken);
         await PushToDataRepository(dataRepositoryDirectory, targetPath, generatedOutputPath, extracts, upstreamMd5s, gitHubToken, gitName, gitEmail, cancellationToken);
 
         stats.GlobalTimezoneFeatureCount = features.Count;
@@ -122,9 +129,9 @@ public sealed class TimeZonesRunner : ITimeZonesRunner
         string? targetDirectory = Path.GetDirectoryName(targetPath);
 
         if (!string.IsNullOrWhiteSpace(targetDirectory))
-            Directory.CreateDirectory(targetDirectory);
+            await _directoryUtil.Create(targetDirectory, cancellationToken: cancellationToken);
 
-        File.Copy(generatedOutputPath, targetPath, overwrite: true);
+        await _fileUtil.Copy(generatedOutputPath, targetPath, cancellationToken: cancellationToken);
         await WriteChecksumManifest(dataRepositoryDirectory, extracts, upstreamMd5s, cancellationToken);
 
         bool hasChanges = await _gitUtil.HasWorkingTreeChanges(dataRepositoryDirectory, cancellationToken);
@@ -140,11 +147,10 @@ public sealed class TimeZonesRunner : ITimeZonesRunner
 
     private async ValueTask<bool> EnsureExtract(ExtractDefinition extract, string cachePath, bool forceDownload, CancellationToken cancellationToken)
     {
-        if (File.Exists(cachePath) && !forceDownload)
+        if (await _fileUtil.Exists(cachePath, cancellationToken) && !forceDownload)
             return false;
 
-        if (File.Exists(cachePath))
-            File.Delete(cachePath);
+        await _fileUtil.DeleteIfExists(cachePath, cancellationToken: cancellationToken);
 
         string? result = await _fileDownloadUtil.DownloadAsStream(extract.Url, cachePath, cancellationToken: cancellationToken);
 
@@ -179,7 +185,7 @@ public sealed class TimeZonesRunner : ITimeZonesRunner
             if (downloadedPath is null)
                 throw new InvalidOperationException($"Failed to download MD5 for extract '{extract.Name}' from {md5Url}.");
 
-            string content = await File.ReadAllTextAsync(downloadedPath, cancellationToken);
+            string content = await _fileUtil.Read(downloadedPath, cancellationToken: cancellationToken);
             string md5 = ParseMd5(content);
 
             _logger.LogInformation("Fetched upstream MD5 for {ExtractName}: {Md5}", extract.Name, md5);
@@ -187,8 +193,7 @@ public sealed class TimeZonesRunner : ITimeZonesRunner
         }
         finally
         {
-            if (File.Exists(tempPath))
-                File.Delete(tempPath);
+            await _fileUtil.DeleteIfExists(tempPath, cancellationToken: cancellationToken);
         }
     }
 
@@ -202,28 +207,28 @@ public sealed class TimeZonesRunner : ITimeZonesRunner
         return value.ToLowerInvariant();
     }
 
-    private static async ValueTask<ExtractChecksumManifest> LoadPreviousChecksums(string dataRepositoryDirectory, CancellationToken cancellationToken)
+    private async ValueTask<ExtractChecksumManifest> LoadPreviousChecksums(string dataRepositoryDirectory, CancellationToken cancellationToken)
     {
         string path = ResolveDataRepositoryPath(dataRepositoryDirectory, Constants.ExtractChecksumManifestRelativePath);
 
-        if (!File.Exists(path))
+        if (!await _fileUtil.Exists(path, cancellationToken))
             return new ExtractChecksumManifest();
 
-        await using FileStream stream = File.OpenRead(path);
+        await using FileStream stream = _fileUtil.OpenRead(path);
         ExtractChecksumManifest? manifest = await JsonSerializer.DeserializeAsync<ExtractChecksumManifest>(stream,
             new JsonSerializerOptions { PropertyNameCaseInsensitive = true }, cancellationToken);
 
         return manifest ?? new ExtractChecksumManifest();
     }
 
-    private static async ValueTask WriteChecksumManifest(string dataRepositoryDirectory, IReadOnlyList<ExtractDefinition> extracts,
+    private async ValueTask WriteChecksumManifest(string dataRepositoryDirectory, IReadOnlyList<ExtractDefinition> extracts,
         IReadOnlyDictionary<string, string> upstreamMd5s, CancellationToken cancellationToken)
     {
         string path = ResolveDataRepositoryPath(dataRepositoryDirectory, Constants.ExtractChecksumManifestRelativePath);
         string? directory = Path.GetDirectoryName(path);
 
         if (!string.IsNullOrWhiteSpace(directory))
-            Directory.CreateDirectory(directory);
+            await _directoryUtil.Create(directory, cancellationToken: cancellationToken);
 
         var manifest = new ExtractChecksumManifest
         {
@@ -238,7 +243,7 @@ public sealed class TimeZonesRunner : ITimeZonesRunner
                       .ToList()
         };
 
-        await using FileStream stream = new(path, FileMode.Create, FileAccess.Write, FileShare.None, 8192, FileOptions.Asynchronous);
+        await using FileStream stream = _fileUtil.OpenWrite(path);
         await JsonSerializer.SerializeAsync(stream, manifest, new JsonSerializerOptions { WriteIndented = true }, cancellationToken);
     }
 
@@ -283,12 +288,12 @@ public sealed class TimeZonesRunner : ITimeZonesRunner
         return features;
     }
 
-    private static async Task<ExtractManifest> LoadManifest(RunnerOptions options, string repoRoot, CancellationToken cancellationToken)
+    private async Task<ExtractManifest> LoadManifest(RunnerOptions options, string repoRoot, CancellationToken cancellationToken)
     {
         if (!string.IsNullOrWhiteSpace(options.ExtractListPath))
         {
             string path = ResolvePath(repoRoot, options.ExtractListPath);
-            await using FileStream stream = File.OpenRead(path);
+            await using FileStream stream = _fileUtil.OpenRead(path);
             ExtractManifest? manifest = await JsonSerializer.DeserializeAsync<ExtractManifest>(stream, new JsonSerializerOptions { PropertyNameCaseInsensitive = true },
                 cancellationToken);
             return manifest ?? throw new InvalidOperationException($"Extract manifest '{path}' could not be read.");
@@ -343,14 +348,14 @@ public sealed class TimeZonesRunner : ITimeZonesRunner
         return fullPath;
     }
 
-    private static string FindRunnerRepositoryRoot()
+    private async ValueTask<string> FindRunnerRepositoryRoot(CancellationToken cancellationToken)
     {
-        string? fromCurrent = FindRunnerRepositoryRootFrom(Directory.GetCurrentDirectory());
+        string? fromCurrent = await FindRunnerRepositoryRootFrom(_directoryUtil.GetWorkingDirectory(), cancellationToken);
 
         if (fromCurrent is not null)
             return fromCurrent;
 
-        string? fromBaseDirectory = FindRunnerRepositoryRootFrom(AppContext.BaseDirectory);
+        string? fromBaseDirectory = await FindRunnerRepositoryRootFrom(AppContext.BaseDirectory, cancellationToken);
 
         if (fromBaseDirectory is not null)
             return fromBaseDirectory;
@@ -358,13 +363,13 @@ public sealed class TimeZonesRunner : ITimeZonesRunner
         throw new DirectoryNotFoundException("Could not locate repository root containing src/Soenneker.TimeZones.Runner.");
     }
 
-    private static string? FindRunnerRepositoryRootFrom(string start)
+    private async ValueTask<string?> FindRunnerRepositoryRootFrom(string start, CancellationToken cancellationToken)
     {
         var directory = new DirectoryInfo(start);
 
         while (directory is not null)
         {
-            if (Directory.Exists(Path.Combine(directory.FullName, "src", "Soenneker.TimeZones.Runner")))
+            if (await _directoryUtil.Exists(Path.Combine(directory.FullName, "src", "Soenneker.TimeZones.Runner"), cancellationToken))
                 return directory.FullName;
 
             directory = directory.Parent;
@@ -373,42 +378,4 @@ public sealed class TimeZonesRunner : ITimeZonesRunner
         return null;
     }
 
-    private static string GetRequiredEnvironmentVariable(string name)
-    {
-        string? value = Environment.GetEnvironmentVariable(name);
-
-        if (string.IsNullOrWhiteSpace(value))
-            throw new InvalidOperationException($"{name} is not set.");
-
-        return value;
-    }
-
-    private static bool FilesEqual(string leftPath, string rightPath)
-    {
-        var left = new FileInfo(leftPath);
-        var right = new FileInfo(rightPath);
-
-        if (!right.Exists || left.Length != right.Length)
-            return false;
-
-        using FileStream leftStream = File.OpenRead(leftPath);
-        using FileStream rightStream = File.OpenRead(rightPath);
-        Span<byte> leftBuffer = stackalloc byte[8192];
-        Span<byte> rightBuffer = stackalloc byte[8192];
-
-        while (true)
-        {
-            int leftRead = leftStream.Read(leftBuffer);
-            int rightRead = rightStream.Read(rightBuffer);
-
-            if (leftRead != rightRead)
-                return false;
-
-            if (leftRead == 0)
-                return true;
-
-            if (!leftBuffer[..leftRead].SequenceEqual(rightBuffer[..rightRead]))
-                return false;
-        }
-    }
 }

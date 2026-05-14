@@ -1,5 +1,8 @@
 using Microsoft.Extensions.DependencyInjection;
-using Soenneker.TimeZones.Runner.Registrars;
+using Soenneker.Git.Util.Registrars;
+using Soenneker.Utils.Directory.Registrars;
+using Soenneker.Utils.File.Download.Registrars;
+using Soenneker.Utils.File.Registrars;
 
 namespace Soenneker.TimeZones.Runner;
 
@@ -8,16 +11,19 @@ namespace Soenneker.TimeZones.Runner;
 /// </summary>
 public static class Startup
 {
-    public static void ConfigureServices(IServiceCollection services, string[] args)
+    public static void ConfigureServices(IServiceCollection services)
     {
-        services.SetupIoC(args);
+        services.SetupIoC();
     }
 
-    public static IServiceCollection SetupIoC(this IServiceCollection services, string[] args)
+    public static IServiceCollection SetupIoC(this IServiceCollection services)
     {
-        services.AddSingleton(args)
-                .AddHostedService<ConsoleHostedService>()
-                .AddTimeZonesRunnerAsSingleton();
+        services.AddHostedService<ConsoleHostedService>()
+                .AddSingleton<TimeZonesRunner>()
+                .AddFileDownloadUtilAsSingleton()
+                .AddGitUtilAsSingleton()
+                .AddFileUtilAsSingleton()
+                .AddDirectoryUtilAsSingleton();
 
         return services;
     }

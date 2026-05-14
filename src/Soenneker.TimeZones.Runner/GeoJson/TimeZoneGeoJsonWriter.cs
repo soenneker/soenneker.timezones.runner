@@ -1,22 +1,24 @@
 using System.Globalization;
-using System.Text;
 using System.Text.Json;
 using Soenneker.TimeZones.Runner.Models;
+using Soenneker.Utils.Directory.Abstract;
+using Soenneker.Utils.File.Abstract;
 
 namespace Soenneker.TimeZones.Runner.GeoJson;
 
 public static class TimeZoneGeoJsonWriter
 {
-    public static async Task Write(string outputPath, IReadOnlyList<TimeZoneFeature> features, CancellationToken cancellationToken)
+    public static async Task Write(string outputPath, IReadOnlyList<TimeZoneFeature> features, IFileUtil fileUtil, IDirectoryUtil directoryUtil,
+        CancellationToken cancellationToken)
     {
         string? directory = Path.GetDirectoryName(outputPath);
 
         if (!string.IsNullOrWhiteSpace(directory))
-            Directory.CreateDirectory(directory);
+            await directoryUtil.Create(directory, cancellationToken: cancellationToken);
 
         string tempPath = outputPath + ".tmp";
 
-        await using (var stream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None, 131_072, FileOptions.Asynchronous))
+        await using (FileStream stream = fileUtil.OpenWrite(tempPath))
         {
             await using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = false });
 
@@ -34,7 +36,8 @@ public static class TimeZoneGeoJsonWriter
             await writer.FlushAsync(cancellationToken);
         }
 
-        File.Move(tempPath, outputPath, true);
+        await fileUtil.DeleteIfExists(outputPath, cancellationToken: cancellationToken);
+        await fileUtil.Move(tempPath, outputPath, cancellationToken: cancellationToken);
     }
 
     private static void WriteFeature(Utf8JsonWriter writer, TimeZoneFeature feature)

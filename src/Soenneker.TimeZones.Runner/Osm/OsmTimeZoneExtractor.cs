@@ -4,11 +4,19 @@ using OsmSharp.Streams;
 using Soenneker.TimeZones.Runner.Configuration;
 using Soenneker.TimeZones.Runner.Geometry;
 using Soenneker.TimeZones.Runner.Models;
+using Soenneker.Utils.File.Abstract;
 
 namespace Soenneker.TimeZones.Runner.Osm;
 
 public sealed class OsmTimeZoneExtractor
 {
+    private readonly IFileUtil _fileUtil;
+
+    public OsmTimeZoneExtractor(IFileUtil fileUtil)
+    {
+        _fileUtil = fileUtil;
+    }
+
     public ExtractStats Extract(ExtractDefinition extract, string pbfPath, RunnerOptions options, Dictionary<string, Paths64> globalPaths)
     {
         var stats = new ExtractStats { Name = extract.Name, CachePath = pbfPath };
@@ -164,9 +172,9 @@ public sealed class OsmTimeZoneExtractor
         return result;
     }
 
-    private static IEnumerable<OsmGeo> Read(string pbfPath)
+    private IEnumerable<OsmGeo> Read(string pbfPath)
     {
-        using var stream = File.OpenRead(pbfPath);
+        using FileStream stream = _fileUtil.OpenRead(pbfPath);
         var source = new PBFOsmStreamSource(stream);
 
         foreach (OsmGeo geo in source)

@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Soenneker.TimeZones.Runner.Abstract;
 
 namespace Soenneker.TimeZones.Runner;
 
@@ -9,17 +8,15 @@ public sealed class ConsoleHostedService : IHostedService
 {
     private readonly ILogger<ConsoleHostedService> _logger;
     private readonly IHostApplicationLifetime _appLifetime;
-    private readonly ITimeZonesRunner _timeZonesRunner;
-    private readonly string[] _args;
+    private readonly TimeZonesRunner _timeZonesRunner;
 
     private int? _exitCode;
 
-    public ConsoleHostedService(ILogger<ConsoleHostedService> logger, IHostApplicationLifetime appLifetime, ITimeZonesRunner timeZonesRunner, string[] args)
+    public ConsoleHostedService(ILogger<ConsoleHostedService> logger, IHostApplicationLifetime appLifetime, TimeZonesRunner timeZonesRunner)
     {
         _logger = logger;
         _appLifetime = appLifetime;
         _timeZonesRunner = timeZonesRunner;
-        _args = args;
     }
 
     public Task StartAsync(CancellationToken cancellationToken = default)
@@ -32,7 +29,9 @@ public sealed class ConsoleHostedService : IHostedService
 
                 try
                 {
-                    await _timeZonesRunner.Run(_args, cancellationToken);
+                    string[] args = Environment.GetCommandLineArgs().Skip(1).ToArray();
+
+                    await _timeZonesRunner.Run(args, cancellationToken);
 
                     _logger.LogInformation("Complete!");
 

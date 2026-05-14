@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Serilog;
 using Soenneker.Enums.DeployEnvironment;
 using Soenneker.Extensions.LoggerConfiguration;
+using Soenneker.Utils.Environment;
 
 namespace Soenneker.TimeZones.Runner;
 
@@ -14,10 +15,7 @@ public static class Program
 
     public static async Task Main(string[] args)
     {
-        _environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
-
-        if (string.IsNullOrWhiteSpace(_environment))
-            _environment = "Development";
+        _environment = EnvironmentUtil.GetVariableStrict("ASPNETCORE_ENVIRONMENT");
 
         _cts = new CancellationTokenSource();
         Console.CancelKeyPress += OnCancelKeyPress;
@@ -45,12 +43,7 @@ public static class Program
     /// </summary>
     public static IHostBuilder CreateHostBuilder(string[] args)
     {
-        _environment ??= Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
-
-        if (string.IsNullOrWhiteSpace(_environment))
-            _environment = "Development";
-
-        DeployEnvironment envEnum = DeployEnvironment.FromName(_environment);
+        DeployEnvironment envEnum = DeployEnvironment.FromName(_environment!);
 
         LoggerConfigurationExtension.BuildBootstrapLoggerAndSetGloballySync(envEnum);
 
@@ -63,7 +56,7 @@ public static class Program
                                     builder.Build();
                                 })
                                 .UseSerilog()
-                                .ConfigureServices((_, services) => { Startup.ConfigureServices(services, args); });
+                                .ConfigureServices((_, services) => { Startup.ConfigureServices(services); });
 
         return host;
     }
