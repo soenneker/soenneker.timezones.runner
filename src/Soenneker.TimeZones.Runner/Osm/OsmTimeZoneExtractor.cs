@@ -1,4 +1,6 @@
 using Clipper2Lib;
+using System.Globalization;
+using Microsoft.Extensions.Logging;
 using OsmSharp;
 using OsmSharp.Streams;
 using Soenneker.TimeZones.Runner.Configuration;
@@ -10,11 +12,15 @@ namespace Soenneker.TimeZones.Runner.Osm;
 
 public sealed class OsmTimeZoneExtractor
 {
-    private readonly IFileUtil _fileUtil;
+    private static readonly TimeSpan _progressInterval = TimeSpan.FromSeconds(30);
 
-    public OsmTimeZoneExtractor(IFileUtil fileUtil)
+    private readonly IFileUtil _fileUtil;
+    private readonly ILogger<OsmTimeZoneExtractor> _logger;
+
+    public OsmTimeZoneExtractor(IFileUtil fileUtil, ILogger<OsmTimeZoneExtractor> logger)
     {
         _fileUtil = fileUtil;
+        _logger = logger;
     }
 
     public ExtractStats Extract(ExtractDefinition extract, string pbfPath, RunnerOptions options, Dictionary<string, Paths64> globalPaths)
@@ -22,9 +28,14 @@ public sealed class OsmTimeZoneExtractor
         var stats = new ExtractStats { Name = extract.Name, CachePath = pbfPath };
         var relations = new List<OsmRelationData>();
         var requiredWayIds = new HashSet<long>();
+        long totalRead = 0;
 
-        foreach (OsmGeo geo in Read(pbfPath))
+        _logger.LogInformation("Starting OSM pass 1/3 for {ExtractName}: scanning relations in {PbfPath}", extract.Name, pbfPath);
+
+        foreach (OsmGeo geo in Read(pbfPath, extract.Name, "1/3 relation scan"))
         {
+            totalRead++;
+
             if (geo is not Relation relation)
                 continue;
 
@@ -61,10 +72,19 @@ public sealed class OsmTimeZoneExtractor
             relations.Add(new OsmRelationData(relation.Id ?? 0, tzid, members));
         }
 
-        var ways = new Dictionary<long, OsmWayData>();
+        _logger.LogInformation(
+            "Completed OSM pass 1/3 for {ExtractName}: read {TotalRead:n0} objects, scanned {RelationsScanned:n0} relations, found {TimezoneRelationsFound:n0} timezone relations, required ways {RequiredWayCount:n0}",
+            extract.Name, totalRead, stats.RelationsScanned, stats.TimezoneRelationsFound, requiredWayIds.Count);
 
-        foreach (OsmGeo geo in Read(pbfPath))
+        var ways = new Dictionary<long, OsmWayData>();
+        totalRead = 0;
+
+        _logger.LogInformation("Starting OSM pass 2/3 for {ExtractName}: loading {RequiredWayCount:n0} required ways", extract.Name, requiredWayIds.Count);
+
+        foreach (OsmGeo geo in Read(pbfPath, extract.Name, "2/3 way load"))
         {
+            totalRead++;
+
             if (geo is not Way way || way.Id is null || way.Nodes is null || !requiredWayIds.Contains(way.Id.Value))
                 continue;
 
@@ -72,12 +92,19 @@ public sealed class OsmTimeZoneExtractor
         }
 
         stats.WaysLoaded = ways.Count;
+        _logger.LogInformation("Completed OSM pass 2/3 for {ExtractName}: read {TotalRead:n0} objects, loaded {WaysLoaded:n0}/{RequiredWayCount:n0} required ways",
+            extract.Name, totalRead, stats.WaysLoaded, requiredWayIds.Count);
 
         var requiredNodeIds = ways.Values.SelectMany(static x => x.NodeIds).ToHashSet();
         var nodes = new Dictionary<long, Coordinate>();
+        totalRead = 0;
 
-        foreach (OsmGeo geo in Read(pbfPath))
+        _logger.LogInformation("Starting OSM pass 3/3 for {ExtractName}: loading {RequiredNodeCount:n0} required nodes", extract.Name, requiredNodeIds.Count);
+
+        foreach (OsmGeo geo in Read(pbfPath, extract.Name, "3/3 node load"))
         {
+            totalRead++;
+
             if (geo is not Node node || node.Id is null || node.Latitude is null || node.Longitude is null || !requiredNodeIds.Contains(node.Id.Value))
                 continue;
 
@@ -85,9 +112,23 @@ public sealed class OsmTimeZoneExtractor
         }
 
         stats.NodesLoaded = nodes.Count;
+        _logger.LogInformation("Completed OSM pass 3/3 for {ExtractName}: read {TotalRead:n0} objects, loaded {NodesLoaded:n0}/{RequiredNodeCount:n0} required nodes",
+            extract.Name, totalRead, stats.NodesLoaded, requiredNodeIds.Count);
+
+        _logger.LogInformation("Starting geometry assembly for {ExtractName}: {RelationCount:n0} timezone relations", extract.Name, relations.Count);
+        var relationIndex = 0;
 
         foreach (OsmRelationData relation in relations)
         {
+            relationIndex++;
+
+            if (relationIndex == 1 || relationIndex % 100 == 0 || relationIndex == relations.Count)
+            {
+                _logger.LogInformation(
+                    "Geometry assembly for {ExtractName}: processing relation {RelationIndex:n0}/{RelationCount:n0}, current global tzids {GlobalTimeZoneCount:n0}, incomplete rings dropped {IncompleteRingsDropped:n0}",
+                    extract.Name, relationIndex, relations.Count, globalPaths.Count, stats.IncompleteRingsDropped);
+            }
+
             Paths64 relationPaths = BuildRelationPaths(relation, ways, nodes, options.MinRingPoints, stats);
 
             if (relationPaths.Count == 0)
@@ -101,6 +142,10 @@ public sealed class OsmTimeZoneExtractor
 
             existing.AddRange(relationPaths);
         }
+
+        _logger.LogInformation(
+            "Completed geometry assembly for {ExtractName}: processed {RelationCount:n0} relations, global tzids {GlobalTimeZoneCount:n0}, incomplete rings dropped {IncompleteRingsDropped:n0}",
+            extract.Name, relations.Count, globalPaths.Count, stats.IncompleteRingsDropped);
 
         return stats;
     }
@@ -172,12 +217,63 @@ public sealed class OsmTimeZoneExtractor
         return result;
     }
 
-    private IEnumerable<OsmGeo> Read(string pbfPath)
+    private IEnumerable<OsmGeo> Read(string pbfPath, string extractName, string passName)
     {
+        _logger.LogInformation("Opening OSM PBF stream for {ExtractName}, pass {PassName}: {PbfPath}", extractName, passName, pbfPath);
         using FileStream stream = _fileUtil.OpenRead(pbfPath);
+        long streamLength = stream.Length;
+        _logger.LogInformation("Opened OSM PBF stream for {ExtractName}, pass {PassName}. Size: {PbfSize:n0} bytes. Creating OsmSharp PBF source...",
+            extractName, passName, streamLength);
+
         var source = new PBFOsmStreamSource(stream);
+        _logger.LogInformation("OsmSharp PBF source created for {ExtractName}, pass {PassName}. Starting object decode...", extractName, passName);
+
+        var yielded = 0L;
+        long lastYielded = 0;
+        DateTimeOffset lastProgress = DateTimeOffset.UtcNow;
 
         foreach (OsmGeo geo in source)
+        {
+            yielded++;
+
+            if (yielded == 1)
+            {
+                _logger.LogInformation("First OSM object decoded for {ExtractName}, pass {PassName}. PBF read progress: {PbfProgress}",
+                    extractName, passName, FormatProgress(stream.Position, streamLength));
+                lastProgress = DateTimeOffset.UtcNow;
+                lastYielded = yielded;
+            }
+            else
+            {
+                DateTimeOffset now = DateTimeOffset.UtcNow;
+
+                if (now - lastProgress >= _progressInterval)
+                {
+                    long decodedSinceLastLog = yielded - lastYielded;
+
+                    _logger.LogInformation(
+                        "Decoded {DecodedCount:n0} OSM objects for {ExtractName}, pass {PassName}. PBF read progress: {PbfProgress}. Decode rate since last log: {DecodeRate:n0} objects/sec",
+                        yielded, extractName, passName, FormatProgress(stream.Position, streamLength),
+                        decodedSinceLastLog / Math.Max(1D, (now - lastProgress).TotalSeconds));
+
+                    lastProgress = now;
+                    lastYielded = yielded;
+                }
+            }
+
             yield return geo;
+        }
+
+        _logger.LogInformation("Finished object decode for {ExtractName}, pass {PassName}. Decoded {DecodedCount:n0} objects. PBF read progress: {PbfProgress}",
+            extractName, passName, yielded, FormatProgress(stream.Position, streamLength));
+    }
+
+    private static string FormatProgress(long position, long length)
+    {
+        if (length <= 0)
+            return "unknown";
+
+        double percent = Math.Clamp(position / (double)length * 100D, 0D, 100D);
+        return string.Create(CultureInfo.InvariantCulture, $"{percent:0.00}% ({position:n0}/{length:n0} bytes)");
     }
 }

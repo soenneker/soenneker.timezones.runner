@@ -24,16 +24,18 @@ public sealed class TimeZonesRunner
     private readonly IFileUtil _fileUtil;
     private readonly IDirectoryUtil _directoryUtil;
     private readonly IPathUtil _pathUtil;
+    private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<TimeZonesRunner> _logger;
 
     public TimeZonesRunner(IFileDownloadUtil fileDownloadUtil, IGitUtil gitUtil, IFileUtil fileUtil, IDirectoryUtil directoryUtil, IPathUtil pathUtil,
-        ILogger<TimeZonesRunner> logger)
+        ILoggerFactory loggerFactory, ILogger<TimeZonesRunner> logger)
     {
         _fileDownloadUtil = fileDownloadUtil;
         _gitUtil = gitUtil;
         _fileUtil = fileUtil;
         _directoryUtil = directoryUtil;
         _pathUtil = pathUtil;
+        _loggerFactory = loggerFactory;
         _logger = logger;
     }
 
@@ -56,7 +58,7 @@ public sealed class TimeZonesRunner
         if (extracts.Count == 0)
             throw new InvalidOperationException("No enabled extracts are configured.");
 
-        var extractor = new OsmTimeZoneExtractor(_fileUtil);
+        var extractor = new OsmTimeZoneExtractor(_fileUtil, _loggerFactory.CreateLogger<OsmTimeZoneExtractor>());
         var globalPaths = new Dictionary<string, Paths64>(StringComparer.Ordinal);
         var stats = new GenerationStats { ExtractsConfigured = manifest.Extracts.Count };
 
