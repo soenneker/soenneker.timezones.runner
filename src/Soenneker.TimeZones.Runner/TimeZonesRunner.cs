@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Security.Cryptography;
 using System.Text.Json;
 using Clipper2Lib;
 using Microsoft.Extensions.Logging;
@@ -72,6 +73,7 @@ public sealed class TimeZonesRunner
         var stats = new GenerationStats { ExtractsConfigured = manifest.Extracts.Count };
 
         _logger.LogInformation("Scope: {Scope}", options.Scope);
+        _logger.LogInformation("MD5 checking: {Md5CheckingEnabled}", !options.SkipMd5Checking);
         _logger.LogInformation("pyosmium prefilter: {PyosmiumPrefilterEnabled}. Python version: {PythonVersion}. Auto-install Python: {AutoInstallPython}",
             options.UsePyosmiumPrefilter, options.PythonVersion, options.AutoInstallPython);
         _logger.LogInformation("Cache directory: {CacheDirectory}", cacheDirectory);
@@ -83,10 +85,15 @@ public sealed class TimeZonesRunner
 
         string dataRepositoryDirectory = await CloneDataRepository(gitHubToken, cancellationToken);
         string targetPath = ResolveDataRepositoryPath(dataRepositoryDirectory, options.OutputPath);
-        ExtractChecksumManifest previousChecksums = await LoadPreviousChecksums(dataRepositoryDirectory, cancellationToken);
-        Dictionary<string, string> upstreamMd5s = await LoadUpstreamMd5s(extracts, cancellationToken);
+        Dictionary<string, string> previousChecksums = options.SkipMd5Checking
+            ? new Dictionary<string, string>(StringComparer.Ordinal)
+            : await LoadPreviousChecksums(dataRepositoryDirectory, cancellationToken);
+        Dictionary<string, string> upstreamMd5s = options.SkipMd5Checking
+            ? new Dictionary<string, string>(StringComparer.Ordinal)
+            : await LoadUpstreamMd5s(extracts, cancellationToken);
 
-        if (!options.ForceDownload && await _fileUtil.Exists(targetPath, cancellationToken) && ExtractChecksumsMatch(extracts, upstreamMd5s, previousChecksums))
+        if (!options.SkipMd5Checking && !options.ForceDownload && await _fileUtil.Exists(targetPath, cancellationToken) &&
+            ExtractChecksumsMatch(extracts, upstreamMd5s, previousChecksums))
         {
             _logger.LogInformation("All configured extract MD5s match the data repository checksum manifest; skipping PBF downloads and generation.");
             return;
@@ -95,8 +102,9 @@ public sealed class TimeZonesRunner
         foreach (ExtractDefinition extract in extracts)
         {
             string cachePath = Path.Combine(cacheDirectory, extract.CacheFileName);
-            bool md5Changed = IsMd5Changed(extract, upstreamMd5s, previousChecksums);
-            bool downloaded = await EnsureExtract(extract, cachePath, options.ForceDownload || md5Changed, cancellationToken);
+            string? upstreamMd5 = options.SkipMd5Checking ? null : upstreamMd5s[extract.CacheFileName];
+            bool md5Changed = !options.SkipMd5Checking && IsMd5Changed(extract, upstreamMd5s, previousChecksums);
+            bool downloaded = await EnsureExtract(extract, cachePath, upstreamMd5, options.ForceDownload || md5Changed, cancellationToken);
 
             if (downloaded)
                 stats.ExtractsDownloaded++;
@@ -105,7 +113,7 @@ public sealed class TimeZonesRunner
 
             _logger.LogInformation(
                 "Processing extract {ExtractName}. Url: {ExtractUrl}. Cache path: {CachePath}. Upstream MD5: {UpstreamMd5}. MD5 changed: {Md5Changed}. Download: {DownloadStatus}",
-                extract.Name, extract.Url, cachePath, upstreamMd5s[extract.CacheFileName], md5Changed,
+                extract.Name, extract.Url, cachePath, upstreamMd5 ?? "(skipped)", md5Changed,
                 downloaded ? "performed" : "skipped, reused cached file");
 
             string processingPath = cachePath;
@@ -120,7 +128,7 @@ public sealed class TimeZonesRunner
             {
                 Downloaded = downloaded,
                 Md5Changed = md5Changed,
-                UpstreamMd5 = upstreamMd5s[extract.CacheFileName]
+                UpstreamMd5 = upstreamMd5
             };
             stats.PerExtract.Add(extractStats);
             stats.ExtractsProcessed++;
@@ -133,9 +141,10 @@ public sealed class TimeZonesRunner
 
         List<TimeZoneFeature> features = BuildFeatures(globalPaths, options.MinRingPoints);
         TimeZoneDatasetValidator.Validate(features, options.MinRingPoints);
+
         await TimeZoneGeoJsonWriter.Write(generatedOutputPath, features, _fileUtil, _directoryUtil, _pathUtil, cancellationToken);
-        await PushToDataRepository(dataRepositoryDirectory, targetPath, generatedOutputPath, extracts, upstreamMd5s, gitHubToken, gitName, gitEmail,
-            cancellationToken);
+        await PushToDataRepository(dataRepositoryDirectory, targetPath, generatedOutputPath, extracts, upstreamMd5s, !options.SkipMd5Checking, gitHubToken,
+            gitName, gitEmail, cancellationToken);
 
         stats.GlobalTimezoneFeatureCount = features.Count;
         stopwatch.Stop();
@@ -153,8 +162,8 @@ public sealed class TimeZonesRunner
     }
 
     private async ValueTask PushToDataRepository(string dataRepositoryDirectory, string targetPath, string generatedOutputPath,
-        IReadOnlyList<ExtractDefinition> extracts, IReadOnlyDictionary<string, string> upstreamMd5s, string gitHubToken, string gitName, string gitEmail,
-        CancellationToken cancellationToken)
+        IReadOnlyList<ExtractDefinition> extracts, IReadOnlyDictionary<string, string> upstreamMd5s, bool writeChecksumManifest, string gitHubToken,
+        string gitName, string gitEmail, CancellationToken cancellationToken)
     {
         string? targetDirectory = Path.GetDirectoryName(targetPath);
 
@@ -162,7 +171,9 @@ public sealed class TimeZonesRunner
             await _directoryUtil.Create(targetDirectory, cancellationToken: cancellationToken);
 
         await _fileUtil.Copy(generatedOutputPath, targetPath, cancellationToken: cancellationToken);
-        await WriteChecksumManifest(dataRepositoryDirectory, extracts, upstreamMd5s, cancellationToken);
+
+        if (writeChecksumManifest)
+            await WriteChecksumManifest(dataRepositoryDirectory, extracts, upstreamMd5s, cancellationToken);
 
         bool hasChanges = await _gitUtil.HasWorkingTreeChanges(dataRepositoryDirectory, cancellationToken);
 
@@ -175,10 +186,22 @@ public sealed class TimeZonesRunner
         await _gitUtil.CommitAndPush(dataRepositoryDirectory, "Update timezone boundary GeoJSON", gitHubToken, gitName, gitEmail, cancellationToken);
     }
 
-    private async ValueTask<bool> EnsureExtract(ExtractDefinition extract, string cachePath, bool forceDownload, CancellationToken cancellationToken)
+    private async ValueTask<bool> EnsureExtract(ExtractDefinition extract, string cachePath, string? expectedMd5, bool forceDownload,
+        CancellationToken cancellationToken)
     {
         if (await _fileUtil.Exists(cachePath, cancellationToken) && !forceDownload)
-            return false;
+        {
+            if (expectedMd5 is null)
+                return false;
+
+            string cachedMd5 = await ComputeFileMd5(cachePath, cancellationToken);
+
+            if (string.Equals(cachedMd5, expectedMd5, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            _logger.LogWarning("Cached extract {CachePath} MD5 mismatch. Expected {ExpectedMd5}, found {ActualMd5}; downloading again.", cachePath,
+                expectedMd5, cachedMd5);
+        }
 
         await _fileUtil.DeleteIfExists(cachePath, cancellationToken: cancellationToken);
 
@@ -187,7 +210,23 @@ public sealed class TimeZonesRunner
         if (result is null)
             throw new InvalidOperationException($"Failed to download extract '{extract.Name}' from {extract.Url}.");
 
+        if (expectedMd5 is null)
+            return true;
+
+        string downloadedMd5 = await ComputeFileMd5(cachePath, cancellationToken);
+
+        if (!string.Equals(downloadedMd5, expectedMd5, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                $"Downloaded extract '{extract.Name}' failed MD5 verification. Expected {expectedMd5}, found {downloadedMd5}.");
+
         return true;
+    }
+
+    private static async ValueTask<string> ComputeFileMd5(string path, CancellationToken cancellationToken)
+    {
+        await using FileStream stream = File.OpenRead(path);
+        byte[] hash = await MD5.HashDataAsync(stream, cancellationToken);
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     private async ValueTask<Dictionary<string, string>> LoadUpstreamMd5s(IReadOnlyList<ExtractDefinition> extracts, CancellationToken cancellationToken)
@@ -238,18 +277,24 @@ public sealed class TimeZonesRunner
         return value.ToLowerInvariant();
     }
 
-    private async ValueTask<ExtractChecksumManifest> LoadPreviousChecksums(string dataRepositoryDirectory, CancellationToken cancellationToken)
+    private async ValueTask<Dictionary<string, string>> LoadPreviousChecksums(string dataRepositoryDirectory, CancellationToken cancellationToken)
     {
         string path = ResolveDataRepositoryPath(dataRepositoryDirectory, Constants.ExtractChecksumManifestRelativePath);
 
         if (!await _fileUtil.Exists(path, cancellationToken))
-            return new ExtractChecksumManifest();
+            return new Dictionary<string, string>(StringComparer.Ordinal);
 
         await using FileStream stream = _fileUtil.OpenRead(path);
-        ExtractChecksumManifest? manifest = await JsonSerializer.DeserializeAsync<ExtractChecksumManifest>(stream,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }, cancellationToken);
+        JsonDocument document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        var checksums = new Dictionary<string, string>(StringComparer.Ordinal);
 
-        return manifest ?? new ExtractChecksumManifest();
+        foreach (JsonProperty property in document.RootElement.EnumerateObject())
+        {
+            if (property.Value.ValueKind == JsonValueKind.String)
+                checksums[property.Name] = property.Value.GetString()!;
+        }
+
+        return checksums;
     }
 
     private async ValueTask WriteChecksumManifest(string dataRepositoryDirectory, IReadOnlyList<ExtractDefinition> extracts,
@@ -261,23 +306,15 @@ public sealed class TimeZonesRunner
         if (!string.IsNullOrWhiteSpace(directory))
             await _directoryUtil.Create(directory, cancellationToken: cancellationToken);
 
-        var manifest = new ExtractChecksumManifest
-        {
-            Extracts = extracts.Select(x => new ExtractChecksum
-            {
-                Name = x.Name,
-                Url = x.Url,
-                CacheFileName = x.CacheFileName,
-                Md5 = upstreamMd5s[x.CacheFileName]
-            }).OrderBy(static x => x.Name, StringComparer.Ordinal).ToList()
-        };
+        Dictionary<string, string> manifest = extracts.OrderBy(static x => x.CacheFileName, StringComparer.Ordinal)
+            .ToDictionary(static x => x.CacheFileName, x => upstreamMd5s[x.CacheFileName], StringComparer.Ordinal);
 
         await using FileStream stream = _fileUtil.OpenWrite(path);
         await JsonSerializer.SerializeAsync(stream, manifest, new JsonSerializerOptions { WriteIndented = true }, cancellationToken);
     }
 
     private static bool ExtractChecksumsMatch(IReadOnlyList<ExtractDefinition> extracts, IReadOnlyDictionary<string, string> upstreamMd5s,
-        ExtractChecksumManifest previousChecksums)
+        IReadOnlyDictionary<string, string> previousChecksums)
     {
         foreach (ExtractDefinition extract in extracts)
         {
@@ -288,13 +325,13 @@ public sealed class TimeZonesRunner
         return true;
     }
 
-    private static bool IsMd5Changed(ExtractDefinition extract, IReadOnlyDictionary<string, string> upstreamMd5s, ExtractChecksumManifest previousChecksums)
+    private static bool IsMd5Changed(ExtractDefinition extract, IReadOnlyDictionary<string, string> upstreamMd5s,
+        IReadOnlyDictionary<string, string> previousChecksums)
     {
         string upstreamMd5 = upstreamMd5s[extract.CacheFileName];
-        ExtractChecksum? previous = previousChecksums.Extracts.FirstOrDefault(x =>
-            string.Equals(x.CacheFileName, extract.CacheFileName, StringComparison.Ordinal) && string.Equals(x.Url, extract.Url, StringComparison.Ordinal));
 
-        return previous is null || !string.Equals(previous.Md5, upstreamMd5, StringComparison.OrdinalIgnoreCase);
+        return !previousChecksums.TryGetValue(extract.CacheFileName, out string? previousMd5) ||
+               !string.Equals(previousMd5, upstreamMd5, StringComparison.OrdinalIgnoreCase);
     }
 
     internal static List<TimeZoneFeature> BuildFeatures(Dictionary<string, Paths64> globalPaths, int minRingPoints)

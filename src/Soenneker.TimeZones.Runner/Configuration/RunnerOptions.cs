@@ -14,7 +14,9 @@ public sealed record RunnerOptions
 
     public bool ForceDownload { get; init; }
 
-    public bool IncludeAdminBoundaries { get; init; }
+    public bool SkipMd5Checking { get; init; } = true;
+
+    public bool IncludeAdminBoundaries { get; init; } = true;
 
     public bool UsePyosmiumPrefilter { get; init; } = true;
 
