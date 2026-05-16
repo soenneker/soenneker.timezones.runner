@@ -18,7 +18,7 @@ public sealed record RunnerOptions
 
     public bool UsePyosmiumPrefilter { get; init; } = true;
 
-    public string PythonVersion { get; init; } = "3.11";
+    public string PythonVersion { get; init; } = "3.12";
 
     public bool AutoInstallPython { get; init; } = true;
 

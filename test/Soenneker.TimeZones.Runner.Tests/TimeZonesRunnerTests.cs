@@ -13,7 +13,7 @@ public sealed class TimeZonesRunnerTests
         await Assert.That(options.Scope).IsEqualTo("world");
         await Assert.That(options.ForceDownload).IsFalse();
         await Assert.That(options.UsePyosmiumPrefilter).IsTrue();
-        await Assert.That(options.PythonVersion).IsEqualTo("3.11");
+        await Assert.That(options.PythonVersion).IsEqualTo("3.12");
         await Assert.That(options.AutoInstallPython).IsTrue();
         await Assert.That(options.MinRingPoints).IsEqualTo(4);
     }
