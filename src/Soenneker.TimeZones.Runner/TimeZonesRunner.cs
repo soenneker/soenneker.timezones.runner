@@ -12,6 +12,8 @@ using Soenneker.TimeZones.Runner.Models;
 using Soenneker.TimeZones.Runner.Osm;
 using Soenneker.TimeZones.Runner.Validation;
 using Soenneker.Utils.Directory.Abstract;
+using Soenneker.Utils.Dotnet.Abstract;
+using Soenneker.Utils.Dotnet.NuGet.Abstract;
 using Soenneker.Utils.Environment;
 using Soenneker.Utils.File.Abstract;
 using Soenneker.Utils.File.Download.Abstract;
@@ -29,11 +31,14 @@ public sealed class TimeZonesRunner
     private readonly IPathUtil _pathUtil;
     private readonly IPythonUtil _pythonUtil;
     private readonly IProcessUtil _processUtil;
+    private readonly IDotnetUtil _dotnetUtil;
+    private readonly IDotnetNuGetUtil _dotnetNuGetUtil;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<TimeZonesRunner> _logger;
 
     public TimeZonesRunner(IFileDownloadUtil fileDownloadUtil, IGitUtil gitUtil, IFileUtil fileUtil, IDirectoryUtil directoryUtil, IPathUtil pathUtil,
-        IPythonUtil pythonUtil, IProcessUtil processUtil, ILoggerFactory loggerFactory, ILogger<TimeZonesRunner> logger)
+        IPythonUtil pythonUtil, IProcessUtil processUtil, IDotnetUtil dotnetUtil, IDotnetNuGetUtil dotnetNuGetUtil, ILoggerFactory loggerFactory,
+        ILogger<TimeZonesRunner> logger)
     {
         _fileDownloadUtil = fileDownloadUtil;
         _gitUtil = gitUtil;
@@ -42,6 +47,8 @@ public sealed class TimeZonesRunner
         _pathUtil = pathUtil;
         _pythonUtil = pythonUtil;
         _processUtil = processUtil;
+        _dotnetUtil = dotnetUtil;
+        _dotnetNuGetUtil = dotnetNuGetUtil;
         _loggerFactory = loggerFactory;
         _logger = logger;
     }
@@ -92,8 +99,7 @@ public sealed class TimeZonesRunner
             ? new Dictionary<string, string>(StringComparer.Ordinal)
             : await LoadUpstreamMd5s(extracts, cancellationToken);
 
-        if (!options.SkipMd5Checking && !options.ForceDownload && await _fileUtil.Exists(targetPath, cancellationToken) &&
-            ExtractChecksumsMatch(extracts, upstreamMd5s, previousChecksums))
+        if (!options.SkipMd5Checking && !options.ForceDownload && ExtractChecksumsMatch(extracts, upstreamMd5s, previousChecksums))
         {
             _logger.LogInformation("All configured extract MD5s match the data repository checksum manifest; skipping PBF downloads and generation.");
             return;
@@ -143,7 +149,7 @@ public sealed class TimeZonesRunner
         TimeZoneDatasetValidator.Validate(features, options.MinRingPoints);
 
         await TimeZoneGeoJsonWriter.Write(generatedOutputPath, features, _fileUtil, _directoryUtil, _pathUtil, cancellationToken);
-        await PushToDataRepository(dataRepositoryDirectory, targetPath, generatedOutputPath, extracts, upstreamMd5s, !options.SkipMd5Checking, gitHubToken,
+        await PublishDataPackage(dataRepositoryDirectory, targetPath, generatedOutputPath, extracts, upstreamMd5s, !options.SkipMd5Checking, gitHubToken,
             gitName, gitEmail, cancellationToken);
 
         stats.GlobalTimezoneFeatureCount = features.Count;
@@ -161,29 +167,63 @@ public sealed class TimeZonesRunner
         return await _gitUtil.CloneToTempDirectory(Constants.DataRepositoryUri, gitHubToken, cancellationToken);
     }
 
-    private async ValueTask PushToDataRepository(string dataRepositoryDirectory, string targetPath, string generatedOutputPath,
+    private async ValueTask PublishDataPackage(string dataRepositoryDirectory, string targetPath, string generatedOutputPath,
         IReadOnlyList<ExtractDefinition> extracts, IReadOnlyDictionary<string, string> upstreamMd5s, bool writeChecksumManifest, string gitHubToken,
         string gitName, string gitEmail, CancellationToken cancellationToken)
     {
+        string version = EnvironmentUtil.GetVariableStrict("BUILD_VERSION");
+        string nuGetToken = EnvironmentUtil.GetVariableStrict("NUGET__TOKEN");
         string? targetDirectory = Path.GetDirectoryName(targetPath);
 
         if (!string.IsNullOrWhiteSpace(targetDirectory))
             await _directoryUtil.Create(targetDirectory, cancellationToken: cancellationToken);
 
-        await _fileUtil.Copy(generatedOutputPath, targetPath, cancellationToken: cancellationToken);
+        await _fileUtil.DeleteIfExists(targetPath, cancellationToken: cancellationToken);
+        await _fileUtil.Copy(generatedOutputPath, targetPath, true, cancellationToken);
 
         if (writeChecksumManifest)
             await WriteChecksumManifest(dataRepositoryDirectory, extracts, upstreamMd5s, cancellationToken);
+
+        string projectPath = ResolveDataRepositoryPath(dataRepositoryDirectory,
+            Path.Combine("src", Constants.DataLibrary, $"{Constants.DataLibrary}.csproj"));
+        string packageOutputDirectory = Path.Combine(dataRepositoryDirectory, "artifacts", "packages");
+        await _directoryUtil.Create(packageOutputDirectory, cancellationToken: cancellationToken);
+
+        _logger.LogInformation("Building {PackageId} {Version} from {ProjectPath}.", Constants.DataLibrary, version, projectPath);
+
+        if (!await _dotnetUtil.Restore(projectPath, cancellationToken: cancellationToken))
+            throw new InvalidOperationException($"dotnet restore failed for {projectPath}.");
+
+        if (!await _dotnetUtil.Build(projectPath, configuration: "Release", restore: false, cancellationToken: cancellationToken))
+            throw new InvalidOperationException($"dotnet build failed for {projectPath}.");
+
+        if (!await _dotnetUtil.Pack(projectPath, version, configuration: "Release", restore: false, build: false, output: packageOutputDirectory,
+                cancellationToken: cancellationToken))
+        {
+            throw new InvalidOperationException($"dotnet pack failed for {projectPath}.");
+        }
+
+        string packagePath = Path.Combine(packageOutputDirectory, $"{Constants.DataLibrary}.{version}.nupkg");
+
+        if (!await _fileUtil.Exists(packagePath, cancellationToken))
+            throw new FileNotFoundException($"Expected package was not produced: {packagePath}", packagePath);
+
+        _logger.LogInformation("Publishing {PackagePath} to NuGet.", packagePath);
+
+        bool pushed = await _dotnetNuGetUtil.Push(packagePath, apiKey: nuGetToken, skipDuplicate: true, cancellationToken: cancellationToken);
+
+        if (!pushed)
+            throw new InvalidOperationException($"NuGet push failed for {packagePath}.");
 
         bool hasChanges = await _gitUtil.HasWorkingTreeChanges(dataRepositoryDirectory, cancellationToken);
 
         if (!hasChanges)
         {
-            _logger.LogInformation("No working tree changes detected in {RepositoryDirectory}; nothing to push.", dataRepositoryDirectory);
+            _logger.LogInformation("No checksum metadata changes detected in {RepositoryDirectory}; nothing to push.", dataRepositoryDirectory);
             return;
         }
 
-        await _gitUtil.CommitAndPush(dataRepositoryDirectory, "Update timezone boundary GeoJSON", gitHubToken, gitName, gitEmail, cancellationToken);
+        await _gitUtil.CommitAndPush(dataRepositoryDirectory, "Update timezone source checksums", gitHubToken, gitName, gitEmail, cancellationToken);
     }
 
     private async ValueTask<bool> EnsureExtract(ExtractDefinition extract, string cachePath, string? expectedMd5, bool forceDownload,
