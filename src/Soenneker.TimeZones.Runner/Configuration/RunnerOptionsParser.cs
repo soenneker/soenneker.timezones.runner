@@ -19,6 +19,9 @@ public static class RunnerOptionsParser
                 "--output" => options with { OutputPath = ReadValue(args, ref i, arg) },
                 "--force-download" => options with { ForceDownload = true },
                 "--include-admin-boundaries" => options with { IncludeAdminBoundaries = true },
+                "--disable-pyosmium-prefilter" => options with { UsePyosmiumPrefilter = false },
+                "--python-version" => options with { PythonVersion = ReadValue(args, ref i, arg) },
+                "--disable-python-auto-install" => options with { AutoInstallPython = false },
                 "--min-ring-points" => options with { MinRingPoints = ParseInt(ReadValue(args, ref i, arg), arg) },
                 "--verbose" => options with { Verbose = true },
                 _ => throw new ArgumentException($"Unknown argument '{arg}'.")
@@ -27,6 +30,9 @@ public static class RunnerOptionsParser
 
         if (options.Scope is not ("world" or "continent" or "url"))
             throw new ArgumentException("--scope must be one of: world, continent, url.");
+
+        if (string.IsNullOrWhiteSpace(options.PythonVersion))
+            throw new ArgumentException("--python-version must not be empty.");
 
         if (options.MinRingPoints < 4)
             throw new ArgumentException("--min-ring-points must be at least 4.");

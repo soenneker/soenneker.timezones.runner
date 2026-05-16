@@ -49,27 +49,17 @@ public sealed class OsmTimeZoneExtractor
             if (tzid is null)
                 continue;
 
-            var members = new List<OsmRelationMemberData>();
+            OsmRelationData? relationData = ToRelationData(relation);
 
-            foreach (RelationMember member in relation.Members ?? [])
-            {
-                if (member.Type != OsmGeoType.Way)
-                    continue;
-
-                string role = string.IsNullOrWhiteSpace(member.Role) ? "outer" : member.Role.Trim().ToLowerInvariant();
-
-                if (role is not "inner")
-                    role = "outer";
-
-                members.Add(new OsmRelationMemberData(member.Id, role));
-                requiredWayIds.Add(member.Id);
-            }
-
-            if (members.Count == 0)
+            if (relationData is null)
                 continue;
 
             stats.TimezoneRelationsFound++;
-            relations.Add(new OsmRelationData(relation.Id ?? 0, tzid, members));
+
+            foreach (OsmRelationMemberData member in relationData.Members)
+                requiredWayIds.Add(member.WayId);
+
+            relations.Add(relationData);
         }
 
         _logger.LogInformation(
@@ -115,6 +105,69 @@ public sealed class OsmTimeZoneExtractor
         _logger.LogInformation("Completed OSM pass 3/3 for {ExtractName}: read {TotalRead:n0} objects, loaded {NodesLoaded:n0}/{RequiredNodeCount:n0} required nodes",
             extract.Name, totalRead, stats.NodesLoaded, requiredNodeIds.Count);
 
+        AssembleGeometry(extract, options, globalPaths, stats, relations, ways, nodes);
+
+        return stats;
+    }
+
+    public ExtractStats ExtractComplete(ExtractDefinition extract, string pbfPath, RunnerOptions options, Dictionary<string, Paths64> globalPaths)
+    {
+        var stats = new ExtractStats { Name = extract.Name, CachePath = pbfPath };
+        var relations = new List<OsmRelationData>();
+        var ways = new Dictionary<long, OsmWayData>();
+        var nodes = new Dictionary<long, Coordinate>();
+        long totalRead = 0;
+
+        _logger.LogInformation("Starting OSM single pass for {ExtractName}: loading complete filtered extract {PbfPath}", extract.Name, pbfPath);
+
+        foreach (OsmGeo geo in Read(pbfPath, extract.Name, "1/1 filtered closure load"))
+        {
+            totalRead++;
+
+            switch (geo)
+            {
+                case Node node when node.Id is not null && node.Latitude is not null && node.Longitude is not null:
+                    long nodeId = node.Id.Value;
+                    nodes[nodeId] = new Coordinate(node.Longitude.Value, node.Latitude.Value);
+                    break;
+                case Way way when way.Id is not null && way.Nodes is not null:
+                    long wayId = way.Id.Value;
+                    ways[wayId] = new OsmWayData(wayId, way.Nodes);
+                    break;
+                case Relation relation:
+                {
+                    stats.RelationsScanned++;
+
+                    if (!OsmTagUtil.IsTimezoneRelation(relation.Tags, options.IncludeAdminBoundaries))
+                        break;
+
+                    OsmRelationData? relationData = ToRelationData(relation);
+
+                    if (relationData is null)
+                        break;
+
+                    stats.TimezoneRelationsFound++;
+                    relations.Add(relationData);
+                    break;
+                }
+            }
+        }
+
+        stats.WaysLoaded = ways.Count;
+        stats.NodesLoaded = nodes.Count;
+
+        _logger.LogInformation(
+            "Completed OSM single pass for {ExtractName}: read {TotalRead:n0} objects, scanned {RelationsScanned:n0} relations, found {TimezoneRelationsFound:n0} timezone relations, loaded {WaysLoaded:n0} ways and {NodesLoaded:n0} nodes",
+            extract.Name, totalRead, stats.RelationsScanned, stats.TimezoneRelationsFound, stats.WaysLoaded, stats.NodesLoaded);
+
+        AssembleGeometry(extract, options, globalPaths, stats, relations, ways, nodes);
+
+        return stats;
+    }
+
+    private void AssembleGeometry(ExtractDefinition extract, RunnerOptions options, Dictionary<string, Paths64> globalPaths, ExtractStats stats,
+        List<OsmRelationData> relations, Dictionary<long, OsmWayData> ways, Dictionary<long, Coordinate> nodes)
+    {
         _logger.LogInformation("Starting geometry assembly for {ExtractName}: {RelationCount:n0} timezone relations", extract.Name, relations.Count);
         var relationIndex = 0;
 
@@ -146,8 +199,31 @@ public sealed class OsmTimeZoneExtractor
         _logger.LogInformation(
             "Completed geometry assembly for {ExtractName}: processed {RelationCount:n0} relations, global tzids {GlobalTimeZoneCount:n0}, incomplete rings dropped {IncompleteRingsDropped:n0}",
             extract.Name, relations.Count, globalPaths.Count, stats.IncompleteRingsDropped);
+    }
 
-        return stats;
+    private static OsmRelationData? ToRelationData(Relation relation)
+    {
+        string? tzid = OsmTagUtil.GetTimeZoneId(relation.Tags);
+
+        if (tzid is null)
+            return null;
+
+        var members = new List<OsmRelationMemberData>();
+
+        foreach (RelationMember member in relation.Members ?? [])
+        {
+            if (member.Type != OsmGeoType.Way)
+                continue;
+
+            string role = string.IsNullOrWhiteSpace(member.Role) ? "outer" : member.Role.Trim().ToLowerInvariant();
+
+            if (role is not "inner")
+                role = "outer";
+
+            members.Add(new OsmRelationMemberData(member.Id, role));
+        }
+
+        return members.Count == 0 ? null : new OsmRelationData(relation.Id ?? 0, tzid, members);
     }
 
     private static Paths64 BuildRelationPaths(OsmRelationData relation, Dictionary<long, OsmWayData> ways, Dictionary<long, Coordinate> nodes,

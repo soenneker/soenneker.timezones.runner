@@ -1,9 +1,11 @@
 using Microsoft.Extensions.DependencyInjection;
 using Soenneker.Git.Util.Registrars;
+using Soenneker.Python.Util.Registrars;
 using Soenneker.Utils.Directory.Registrars;
 using Soenneker.Utils.File.Download.Registrars;
 using Soenneker.Utils.File.Registrars;
 using Soenneker.Utils.Path.Registrars;
+using Soenneker.Utils.Process.Registrars;
 
 namespace Soenneker.TimeZones.Runner;
 
@@ -25,7 +27,9 @@ public static class Startup
                 .AddGitUtilAsSingleton()
                 .AddFileUtilAsSingleton()
                 .AddDirectoryUtilAsSingleton()
-                .AddPathUtilAsSingleton();
+                .AddPathUtilAsSingleton()
+                .AddPythonUtilAsSingleton()
+                .AddProcessUtilAsSingleton();
 
         return services;
     }

@@ -3,6 +3,7 @@ using System.Text.Json;
 using Clipper2Lib;
 using Microsoft.Extensions.Logging;
 using Soenneker.Git.Util.Abstract;
+using Soenneker.Python.Util.Abstract;
 using Soenneker.TimeZones.Runner.Configuration;
 using Soenneker.TimeZones.Runner.GeoJson;
 using Soenneker.TimeZones.Runner.Geometry;
@@ -14,6 +15,7 @@ using Soenneker.Utils.Environment;
 using Soenneker.Utils.File.Abstract;
 using Soenneker.Utils.File.Download.Abstract;
 using Soenneker.Utils.Path.Abstract;
+using Soenneker.Utils.Process.Abstract;
 
 namespace Soenneker.TimeZones.Runner;
 
@@ -24,17 +26,21 @@ public sealed class TimeZonesRunner
     private readonly IFileUtil _fileUtil;
     private readonly IDirectoryUtil _directoryUtil;
     private readonly IPathUtil _pathUtil;
+    private readonly IPythonUtil _pythonUtil;
+    private readonly IProcessUtil _processUtil;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<TimeZonesRunner> _logger;
 
     public TimeZonesRunner(IFileDownloadUtil fileDownloadUtil, IGitUtil gitUtil, IFileUtil fileUtil, IDirectoryUtil directoryUtil, IPathUtil pathUtil,
-        ILoggerFactory loggerFactory, ILogger<TimeZonesRunner> logger)
+        IPythonUtil pythonUtil, IProcessUtil processUtil, ILoggerFactory loggerFactory, ILogger<TimeZonesRunner> logger)
     {
         _fileDownloadUtil = fileDownloadUtil;
         _gitUtil = gitUtil;
         _fileUtil = fileUtil;
         _directoryUtil = directoryUtil;
         _pathUtil = pathUtil;
+        _pythonUtil = pythonUtil;
+        _processUtil = processUtil;
         _loggerFactory = loggerFactory;
         _logger = logger;
     }
@@ -45,6 +51,7 @@ public sealed class TimeZonesRunner
         RunnerOptions options = RunnerOptionsParser.Parse(args);
         string runnerRepoRoot = await FindRunnerRepositoryRoot(cancellationToken);
         string cacheDirectory = ResolvePath(runnerRepoRoot, options.CacheDirectory);
+        string toolsDirectory = Path.Combine(runnerRepoRoot, "artifacts", "tools");
         string generatedOutputDirectory = Path.Combine(runnerRepoRoot, "artifacts", "timezones");
         await _directoryUtil.Create(generatedOutputDirectory, cancellationToken: cancellationToken);
         string generatedOutputPath = await _pathUtil.GetRandomUniqueFilePath(generatedOutputDirectory, ".geojson", cancellationToken);
@@ -59,11 +66,16 @@ public sealed class TimeZonesRunner
             throw new InvalidOperationException("No enabled extracts are configured.");
 
         var extractor = new OsmTimeZoneExtractor(_fileUtil, _loggerFactory.CreateLogger<OsmTimeZoneExtractor>());
+        var pyosmiumPrefilter = new PyosmiumPrefilter(_fileUtil, _directoryUtil, _pythonUtil, _processUtil,
+            _loggerFactory.CreateLogger<PyosmiumPrefilter>());
         var globalPaths = new Dictionary<string, Paths64>(StringComparer.Ordinal);
         var stats = new GenerationStats { ExtractsConfigured = manifest.Extracts.Count };
 
         _logger.LogInformation("Scope: {Scope}", options.Scope);
+        _logger.LogInformation("pyosmium prefilter: {PyosmiumPrefilterEnabled}. Python version: {PythonVersion}. Auto-install Python: {AutoInstallPython}",
+            options.UsePyosmiumPrefilter, options.PythonVersion, options.AutoInstallPython);
         _logger.LogInformation("Cache directory: {CacheDirectory}", cacheDirectory);
+        _logger.LogInformation("Tools directory: {ToolsDirectory}", toolsDirectory);
         _logger.LogInformation("Generated output path: {GeneratedOutputPath}", generatedOutputPath);
         _logger.LogInformation("Data repository output path: {DataRepositoryOutputPath}", options.OutputPath);
 
@@ -96,7 +108,15 @@ public sealed class TimeZonesRunner
                 extract.Name, extract.Url, cachePath, upstreamMd5s[extract.CacheFileName], md5Changed,
                 downloaded ? "performed" : "skipped, reused cached file");
 
-            ExtractStats extractStats = extractor.Extract(extract, cachePath, options, globalPaths) with
+            string processingPath = cachePath;
+
+            if (options.UsePyosmiumPrefilter)
+                processingPath = await pyosmiumPrefilter.EnsureFilteredExtract(extract, cachePath, options, toolsDirectory,
+                    options.ForceDownload || md5Changed || downloaded, cancellationToken);
+
+            ExtractStats extractStats = (options.UsePyosmiumPrefilter
+                ? extractor.ExtractComplete(extract, processingPath, options, globalPaths)
+                : extractor.Extract(extract, processingPath, options, globalPaths)) with
             {
                 Downloaded = downloaded,
                 Md5Changed = md5Changed,
@@ -277,7 +297,7 @@ public sealed class TimeZonesRunner
         return previous is null || !string.Equals(previous.Md5, upstreamMd5, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static List<TimeZoneFeature> BuildFeatures(Dictionary<string, Paths64> globalPaths, int minRingPoints)
+    internal static List<TimeZoneFeature> BuildFeatures(Dictionary<string, Paths64> globalPaths, int minRingPoints)
     {
         var features = new List<TimeZoneFeature>();
 

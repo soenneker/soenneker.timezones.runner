@@ -16,6 +16,12 @@ public sealed record RunnerOptions
 
     public bool IncludeAdminBoundaries { get; init; }
 
+    public bool UsePyosmiumPrefilter { get; init; } = true;
+
+    public string PythonVersion { get; init; } = "3.11";
+
+    public bool AutoInstallPython { get; init; } = true;
+
     public int MinRingPoints { get; init; } = 4;
 
     public bool Verbose { get; init; }
