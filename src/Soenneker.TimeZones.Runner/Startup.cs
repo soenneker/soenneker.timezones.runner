@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Soenneker.Git.Util.Registrars;
+using Soenneker.GitHub.Repositories.Releases.Registrars;
 using Soenneker.Python.Util.Registrars;
 using Soenneker.Utils.Directory.Registrars;
 using Soenneker.Utils.Dotnet.NuGet.Registrars;
@@ -31,7 +32,8 @@ public static class Startup
                 .AddPathUtilAsSingleton()
                 .AddPythonUtilAsSingleton()
                 .AddProcessUtilAsSingleton()
-                .AddDotnetNuGetUtilAsSingleton();
+                .AddDotnetNuGetUtilAsSingleton()
+                .AddGitHubRepositoriesReleasesUtilAsSingleton();
 
         return services;
     }

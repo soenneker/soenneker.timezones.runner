@@ -4,6 +4,7 @@ using System.Text.Json;
 using Clipper2Lib;
 using Microsoft.Extensions.Logging;
 using Soenneker.Git.Util.Abstract;
+using Soenneker.GitHub.Repositories.Releases.Abstract;
 using Soenneker.Python.Util.Abstract;
 using Soenneker.TimeZones.Runner.Configuration;
 using Soenneker.TimeZones.Runner.GeoJson;
@@ -33,12 +34,13 @@ public sealed class TimeZonesRunner
     private readonly IProcessUtil _processUtil;
     private readonly IDotnetUtil _dotnetUtil;
     private readonly IDotnetNuGetUtil _dotnetNuGetUtil;
+    private readonly IGitHubRepositoriesReleasesUtil _releasesUtil;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<TimeZonesRunner> _logger;
 
     public TimeZonesRunner(IFileDownloadUtil fileDownloadUtil, IGitUtil gitUtil, IFileUtil fileUtil, IDirectoryUtil directoryUtil, IPathUtil pathUtil,
-        IPythonUtil pythonUtil, IProcessUtil processUtil, IDotnetUtil dotnetUtil, IDotnetNuGetUtil dotnetNuGetUtil, ILoggerFactory loggerFactory,
-        ILogger<TimeZonesRunner> logger)
+        IPythonUtil pythonUtil, IProcessUtil processUtil, IDotnetUtil dotnetUtil, IDotnetNuGetUtil dotnetNuGetUtil,
+        IGitHubRepositoriesReleasesUtil releasesUtil, ILoggerFactory loggerFactory, ILogger<TimeZonesRunner> logger)
     {
         _fileDownloadUtil = fileDownloadUtil;
         _gitUtil = gitUtil;
@@ -49,6 +51,7 @@ public sealed class TimeZonesRunner
         _processUtil = processUtil;
         _dotnetUtil = dotnetUtil;
         _dotnetNuGetUtil = dotnetNuGetUtil;
+        _releasesUtil = releasesUtil;
         _loggerFactory = loggerFactory;
         _logger = logger;
     }
@@ -173,6 +176,7 @@ public sealed class TimeZonesRunner
     {
         string version = EnvironmentUtil.GetVariableStrict("BUILD_VERSION");
         string nuGetToken = EnvironmentUtil.GetVariableStrict("NUGET__TOKEN");
+        string gitHubUsername = EnvironmentUtil.GetVariableStrict("GH__USERNAME");
         string? targetDirectory = Path.GetDirectoryName(targetPath);
 
         if (!string.IsNullOrWhiteSpace(targetDirectory))
@@ -214,6 +218,11 @@ public sealed class TimeZonesRunner
 
         if (!pushed)
             throw new InvalidOperationException($"NuGet push failed for {packagePath}.");
+
+        _logger.LogInformation("Creating GitHub release {Version} for {RepositoryName} with asset {AssetPath}.", version, Constants.DataRepositoryName,
+            targetPath);
+        await _releasesUtil.Create(gitHubUsername, Constants.DataRepositoryName, version, version, "Automated release update", targetPath, false, false,
+            cancellationToken);
 
         bool hasChanges = await _gitUtil.HasWorkingTreeChanges(dataRepositoryDirectory, cancellationToken);
 

@@ -4,6 +4,8 @@ public static class Constants
 {
     public const string DataLibrary = "Soenneker.TimeZones.Data";
 
+    public const string DataRepositoryName = "soenneker.timezones.data";
+
     public const string DataRepositoryUri = "https://github.com/soenneker/soenneker.timezones.data";
 
     public const string DataFileRelativePath = "src/Soenneker.TimeZones.Data/Resources/timezones.geojson";
