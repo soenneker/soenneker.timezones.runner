@@ -12,7 +12,7 @@ public sealed class TimeZonesRunnerTests
 
         await Assert.That(options.Scope).IsEqualTo("world");
         await Assert.That(options.ForceDownload).IsFalse();
-        await Assert.That(options.SkipMd5Checking).IsTrue();
+        await Assert.That(options.SkipMd5Checking).IsFalse();
         await Assert.That(options.IncludeAdminBoundaries).IsTrue();
         await Assert.That(options.UsePyosmiumPrefilter).IsTrue();
         await Assert.That(options.PythonVersion).IsEqualTo("3.12");
@@ -21,11 +21,11 @@ public sealed class TimeZonesRunnerTests
     }
 
     [Test]
-    public async Task Can_enable_md5_checking()
+    public async Task Can_skip_md5_checking()
     {
-        RunnerOptions options = RunnerOptionsParser.Parse(["--enable-md5-checking"]);
+        RunnerOptions options = RunnerOptionsParser.Parse(["--skip-md5-checking"]);
 
-        await Assert.That(options.SkipMd5Checking).IsFalse();
+        await Assert.That(options.SkipMd5Checking).IsTrue();
     }
 
     [Test]
