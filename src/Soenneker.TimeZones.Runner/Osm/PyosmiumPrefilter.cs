@@ -7,6 +7,9 @@ using Soenneker.Utils.Process.Abstract;
 
 namespace Soenneker.TimeZones.Runner.Osm;
 
+/// <summary>
+/// Represents the pyosmium prefilter.
+/// </summary>
 public sealed class PyosmiumPrefilter
 {
     private const string _script =
@@ -91,6 +94,16 @@ public sealed class PyosmiumPrefilter
         _logger = logger;
     }
 
+    /// <summary>
+    /// Executes the ensure filtered extract operation.
+    /// </summary>
+    /// <param name="extract">The extract.</param>
+    /// <param name="sourcePbfPath">The source pbf path.</param>
+    /// <param name="options">The options.</param>
+    /// <param name="toolsDirectory">The tools directory.</param>
+    /// <param name="force">The force.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task containing the result of the operation.</returns>
     public async ValueTask<string> EnsureFilteredExtract(ExtractDefinition extract, string sourcePbfPath, RunnerOptions options, string toolsDirectory,
         bool force, CancellationToken cancellationToken)
     {

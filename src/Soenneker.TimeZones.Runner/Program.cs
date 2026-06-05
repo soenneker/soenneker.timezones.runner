@@ -7,12 +7,20 @@ using Soenneker.Utils.Environment;
 
 namespace Soenneker.TimeZones.Runner;
 
+/// <summary>
+/// Represents the program.
+/// </summary>
 public static class Program
 {
     private static string? _environment;
 
     private static CancellationTokenSource? _cts;
 
+    /// <summary>
+    /// Executes the main operation.
+    /// </summary>
+    /// <param name="args">The args.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
     public static async Task Main(string[] args)
     {
         _environment = EnvironmentUtil.GetVariableStrict("ASPNETCORE_ENVIRONMENT");

@@ -1,9 +1,23 @@
 namespace Soenneker.TimeZones.Runner.Geometry;
 
+/// <summary>
+/// Represents the ring stitch result record.
+/// </summary>
+/// <param name="Rings">The rings.</param>
+/// <param name="IncompleteChainsDropped">The incomplete chains dropped.</param>
 public sealed record RingStitchResult(List<long[]> Rings, int IncompleteChainsDropped);
 
+/// <summary>
+/// Represents the ring stitcher.
+/// </summary>
 public static class RingStitcher
 {
+    /// <summary>
+    /// Executes the stitch operation.
+    /// </summary>
+    /// <param name="wayNodeIds">The way node ids.</param>
+    /// <param name="minRingPoints">The min ring points.</param>
+    /// <returns>The result of the operation.</returns>
     public static RingStitchResult Stitch(IEnumerable<long[]> wayNodeIds, int minRingPoints)
     {
         var chains = wayNodeIds.Where(x => x.Length >= 2).Select(x => x.ToList()).ToList();

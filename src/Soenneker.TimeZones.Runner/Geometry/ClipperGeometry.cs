@@ -3,10 +3,22 @@ using Soenneker.TimeZones.Runner.Models;
 
 namespace Soenneker.TimeZones.Runner.Geometry;
 
+/// <summary>
+/// Represents the clipper geometry.
+/// </summary>
 public static class ClipperGeometry
 {
+    /// <summary>
+    /// The scale.
+    /// </summary>
     public const double Scale = 10_000_000D;
 
+    /// <summary>
+    /// Builds relation geometry.
+    /// </summary>
+    /// <param name="outerRings">The outer rings.</param>
+    /// <param name="innerRings">The inner rings.</param>
+    /// <returns>The result of the operation.</returns>
     public static Paths64 BuildRelationGeometry(IEnumerable<IReadOnlyList<Coordinate>> outerRings, IEnumerable<IReadOnlyList<Coordinate>> innerRings)
     {
         Paths64 outers = ToPaths(outerRings);
@@ -24,6 +36,11 @@ public static class ClipperGeometry
         return Normalize(Clipper.Difference(unionedOuters, unionedInners, FillRule.NonZero));
     }
 
+    /// <summary>
+    /// Executes the normalize operation.
+    /// </summary>
+    /// <param name="paths">The paths.</param>
+    /// <returns>The result of the operation.</returns>
     public static Paths64 Normalize(Paths64 paths)
     {
         if (paths.Count == 0)
@@ -33,6 +50,11 @@ public static class ClipperGeometry
         return Clipper.SimplifyPaths(unioned, 2.0, true);
     }
 
+    /// <summary>
+    /// Executes the to paths operation.
+    /// </summary>
+    /// <param name="rings">The rings.</param>
+    /// <returns>The result of the operation.</returns>
     public static Paths64 ToPaths(IEnumerable<IReadOnlyList<Coordinate>> rings)
     {
         var paths = new Paths64();
@@ -53,6 +75,12 @@ public static class ClipperGeometry
         return paths;
     }
 
+    /// <summary>
+    /// Executes the to multi polygon operation.
+    /// </summary>
+    /// <param name="paths">The paths.</param>
+    /// <param name="minRingPoints">The min ring points.</param>
+    /// <returns>The result of the operation.</returns>
     public static List<List<List<Coordinate>>> ToMultiPolygon(Paths64 paths, int minRingPoints)
     {
         var outers = new List<Path64>();

@@ -7,8 +7,21 @@ using Soenneker.Utils.Path.Abstract;
 
 namespace Soenneker.TimeZones.Runner.GeoJson;
 
+/// <summary>
+/// Represents the time zone geo json writer.
+/// </summary>
 public static class TimeZoneGeoJsonWriter
 {
+    /// <summary>
+    /// Executes the write operation.
+    /// </summary>
+    /// <param name="outputPath">The output path.</param>
+    /// <param name="features">The features.</param>
+    /// <param name="fileUtil">The file util.</param>
+    /// <param name="directoryUtil">The directory util.</param>
+    /// <param name="pathUtil">The path util.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
     public static async Task Write(string outputPath, IReadOnlyList<TimeZoneFeature> features, IFileUtil fileUtil, IDirectoryUtil directoryUtil,
         IPathUtil pathUtil, CancellationToken cancellationToken)
     {

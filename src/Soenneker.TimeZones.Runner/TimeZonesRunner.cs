@@ -22,6 +22,9 @@ using Soenneker.Utils.Process.Abstract;
 
 namespace Soenneker.TimeZones.Runner;
 
+/// <summary>
+/// Represents the time zones runner.
+/// </summary>
 public sealed class TimeZonesRunner
 {
     private readonly IFileDownloadUtil _fileDownloadUtil;
@@ -55,6 +58,12 @@ public sealed class TimeZonesRunner
         _logger = logger;
     }
 
+    /// <summary>
+    /// Executes the run operation.
+    /// </summary>
+    /// <param name="args">The args.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that represents the asynchronous operation.</returns>
     public async ValueTask Run(string[] args, CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();

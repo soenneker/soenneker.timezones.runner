@@ -1,7 +1,13 @@
 namespace Soenneker.TimeZones.Runner.Configuration;
 
+/// <summary>
+/// Represents the default extract manifest.
+/// </summary>
 public static class DefaultExtractManifest
 {
+    /// <summary>
+    /// Gets world.
+    /// </summary>
     public static ExtractManifest World { get; } = new()
     {
         Extracts =
@@ -15,5 +21,8 @@ public static class DefaultExtractManifest
         ]
     };
 
+    /// <summary>
+    /// Gets or sets continent.
+    /// </summary>
     public static ExtractManifest Continent => World;
 }

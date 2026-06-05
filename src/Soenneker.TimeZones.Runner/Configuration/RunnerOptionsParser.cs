@@ -1,7 +1,15 @@
 namespace Soenneker.TimeZones.Runner.Configuration;
 
+/// <summary>
+/// Represents the runner options parser.
+/// </summary>
 public static class RunnerOptionsParser
 {
+    /// <summary>
+    /// Executes the parse operation.
+    /// </summary>
+    /// <param name="args">The args.</param>
+    /// <returns>The result of the operation.</returns>
     public static RunnerOptions Parse(string[] args)
     {
         var options = new RunnerOptions();

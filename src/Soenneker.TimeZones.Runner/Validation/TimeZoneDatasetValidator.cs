@@ -2,8 +2,16 @@ using Soenneker.TimeZones.Runner.Models;
 
 namespace Soenneker.TimeZones.Runner.Validation;
 
+/// <summary>
+/// Represents the time zone dataset validator.
+/// </summary>
 public static class TimeZoneDatasetValidator
 {
+    /// <summary>
+    /// Executes the validate operation.
+    /// </summary>
+    /// <param name="features">The features.</param>
+    /// <param name="minRingPoints">The min ring points.</param>
     public static void Validate(IReadOnlyCollection<TimeZoneFeature> features, int minRingPoints)
     {
         foreach (TimeZoneFeature feature in features)

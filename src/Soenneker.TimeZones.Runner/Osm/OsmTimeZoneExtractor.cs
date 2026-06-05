@@ -10,6 +10,9 @@ using Soenneker.Utils.File.Abstract;
 
 namespace Soenneker.TimeZones.Runner.Osm;
 
+/// <summary>
+/// Represents the osm time zone extractor.
+/// </summary>
 public sealed class OsmTimeZoneExtractor
 {
     private static readonly TimeSpan _progressInterval = TimeSpan.FromSeconds(30);
@@ -23,6 +26,14 @@ public sealed class OsmTimeZoneExtractor
         _logger = logger;
     }
 
+    /// <summary>
+    /// Executes the extract operation.
+    /// </summary>
+    /// <param name="extract">The extract.</param>
+    /// <param name="pbfPath">The pbf path.</param>
+    /// <param name="options">The options.</param>
+    /// <param name="globalPaths">The global paths.</param>
+    /// <returns>The result of the operation.</returns>
     public ExtractStats Extract(ExtractDefinition extract, string pbfPath, RunnerOptions options, Dictionary<string, Paths64> globalPaths)
     {
         var stats = new ExtractStats { Name = extract.Name, CachePath = pbfPath };
@@ -110,6 +121,14 @@ public sealed class OsmTimeZoneExtractor
         return stats;
     }
 
+    /// <summary>
+    /// Executes the extract complete operation.
+    /// </summary>
+    /// <param name="extract">The extract.</param>
+    /// <param name="pbfPath">The pbf path.</param>
+    /// <param name="options">The options.</param>
+    /// <param name="globalPaths">The global paths.</param>
+    /// <returns>The result of the operation.</returns>
     public ExtractStats ExtractComplete(ExtractDefinition extract, string pbfPath, RunnerOptions options, Dictionary<string, Paths64> globalPaths)
     {
         var stats = new ExtractStats { Name = extract.Name, CachePath = pbfPath };
