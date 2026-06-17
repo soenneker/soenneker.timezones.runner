@@ -35,6 +35,6 @@
         <PackageReference Include="Soenneker.Utils.Environment" Version="4.0.665" />
         <PackageReference Include="Soenneker.Utils.File" Version="4.0.2175" />
         <PackageReference Include="Soenneker.Utils.File.Download" Version="4.0.1618" />
-        <PackageReference Include="Soenneker.Utils.Path" Version="4.0.1156" />
+        <PackageReference Include="Soenneker.Utils.Path" Version="4.0.1158" />
     </ItemGroup>
 </Project>
