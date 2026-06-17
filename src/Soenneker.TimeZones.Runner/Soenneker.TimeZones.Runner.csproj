@@ -33,7 +33,7 @@
         <PackageReference Include="Soenneker.Utils.Directory" Version="4.0.868" />
         <PackageReference Include="Soenneker.Utils.Dotnet.NuGet" Version="4.0.1998" />
         <PackageReference Include="Soenneker.Utils.Environment" Version="4.0.665" />
-        <PackageReference Include="Soenneker.Utils.File" Version="4.0.2175" />
+        <PackageReference Include="Soenneker.Utils.File" Version="4.0.2177" />
         <PackageReference Include="Soenneker.Utils.File.Download" Version="4.0.1618" />
         <PackageReference Include="Soenneker.Utils.Path" Version="4.0.1156" />
     </ItemGroup>
