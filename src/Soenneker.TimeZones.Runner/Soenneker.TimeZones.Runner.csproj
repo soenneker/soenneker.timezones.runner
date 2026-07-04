@@ -29,7 +29,7 @@
         <PackageReference Include="Soenneker.Python.Util" Version="4.0.295" />
         <PackageReference Include="Soenneker.Git.Util" Version="4.0.3594" />
         <PackageReference Include="Soenneker.GitHub.Repositories.Releases" Version="4.0.873" />
-        <PackageReference Include="Soenneker.Extensions.LoggerConfiguration" Version="4.0.1286" />
+        <PackageReference Include="Soenneker.Extensions.LoggerConfiguration" Version="4.0.1287" />
 <PackageReference Include="Soenneker.Utils.Dotnet.NuGet" Version="4.0.2014" />
         <PackageReference Include="Soenneker.Utils.Environment" Version="4.0.678" />
 <PackageReference Include="Soenneker.Utils.File.Download" Version="4.0.1634" />
