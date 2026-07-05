@@ -25,14 +25,12 @@ public static class TimeZoneGeoJsonWriter
     public static async Task Write(string outputPath, IReadOnlyList<TimeZoneFeature> features, IFileUtil fileUtil, IDirectoryUtil directoryUtil,
         IPathUtil pathUtil, CancellationToken cancellationToken)
     {
-        string? directory = Path.GetDirectoryName(outputPath);
+        string fullOutputPath = Path.GetFullPath(outputPath);
+        string directory = Path.GetDirectoryName(fullOutputPath)!;
 
-        if (!string.IsNullOrWhiteSpace(directory))
-            await directoryUtil.Create(directory, cancellationToken: cancellationToken);
+        await directoryUtil.Create(directory, cancellationToken: cancellationToken);
 
-        string tempPath = !string.IsNullOrWhiteSpace(directory)
-            ? await pathUtil.GetRandomUniqueFilePath(directory, ".tmp", cancellationToken)
-            : await pathUtil.GetRandomTempFilePath(".tmp", cancellationToken);
+        string tempPath = await pathUtil.GetRandomUniqueFilePath(directory, ".tmp", cancellationToken);
 
         await using (FileStream stream = fileUtil.OpenWrite(tempPath))
         {
@@ -52,8 +50,10 @@ public static class TimeZoneGeoJsonWriter
             await writer.FlushAsync(cancellationToken);
         }
 
-        await fileUtil.DeleteIfExists(outputPath, cancellationToken: cancellationToken);
-        await fileUtil.Move(tempPath, outputPath, cancellationToken: cancellationToken);
+        await fileUtil.DeleteIfExists(fullOutputPath, cancellationToken: cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+
+        File.Move(tempPath, fullOutputPath);
     }
 
     private static void WriteFeature(Utf8JsonWriter writer, TimeZoneFeature feature)

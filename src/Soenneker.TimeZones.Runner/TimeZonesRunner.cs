@@ -71,9 +71,6 @@ public sealed class TimeZonesRunner
         string runnerRepoRoot = await FindRunnerRepositoryRoot(cancellationToken);
         string cacheDirectory = ResolvePath(runnerRepoRoot, options.CacheDirectory);
         string toolsDirectory = Path.Combine(runnerRepoRoot, "artifacts", "tools");
-        string generatedOutputDirectory = Path.Combine(runnerRepoRoot, "artifacts", "timezones");
-        await _directoryUtil.Create(generatedOutputDirectory, cancellationToken: cancellationToken);
-        string generatedOutputPath = await _pathUtil.GetRandomUniqueFilePath(generatedOutputDirectory, ".geojson", cancellationToken);
         string gitHubToken = EnvironmentUtil.GetVariableStrict("GH__TOKEN");
         string gitName = EnvironmentUtil.GetVariableStrict("GIT__NAME");
         string gitEmail = EnvironmentUtil.GetVariableStrict("GIT__EMAIL");
@@ -98,13 +95,14 @@ public sealed class TimeZonesRunner
             options.UsePyosmiumPrefilter, options.PythonVersion, options.AutoInstallPython);
         _logger.LogInformation("Cache directory: {CacheDirectory}", cacheDirectory);
         _logger.LogInformation("Tools directory: {ToolsDirectory}", toolsDirectory);
-        _logger.LogInformation("Generated output path: {GeneratedOutputPath}", generatedOutputPath);
-        _logger.LogInformation("Data repository output path: {DataRepositoryOutputPath}", options.OutputPath);
 
         await _directoryUtil.Create(cacheDirectory, cancellationToken: cancellationToken);
 
         string dataRepositoryDirectory = await CloneDataRepository(gitHubToken, cancellationToken);
         string targetPath = ResolveDataRepositoryPath(dataRepositoryDirectory, options.OutputPath);
+        _logger.LogInformation("Data repository output path: {DataRepositoryOutputPath}", targetPath);
+        await _fileUtil.DeleteIfExists(targetPath, cancellationToken: cancellationToken);
+
         string? previousMd5 = options.SkipMd5Checking ? null : await LoadPreviousChecksum(dataRepositoryDirectory, extract, cancellationToken);
         string? upstreamMd5 = options.SkipMd5Checking ? null : await DownloadExtractMd5(extract, cancellationToken);
         bool md5Changed = !options.SkipMd5Checking && !string.Equals(previousMd5, upstreamMd5, StringComparison.OrdinalIgnoreCase);
@@ -153,10 +151,10 @@ public sealed class TimeZonesRunner
         List<TimeZoneFeature> features = BuildFeatures(globalPaths, options.MinRingPoints);
         TimeZoneDatasetValidator.Validate(features, options.MinRingPoints);
 
-        await TimeZoneGeoJsonWriter.Write(generatedOutputPath, features, _fileUtil, _directoryUtil, _pathUtil, cancellationToken);
+        await TimeZoneGeoJsonWriter.Write(targetPath, features, _fileUtil, _directoryUtil, _pathUtil, cancellationToken);
 
-        await PublishDataPackage(dataRepositoryDirectory, targetPath, generatedOutputPath, extract, upstreamMd5, !options.SkipMd5Checking,
-            md5Changed, gitHubToken, gitName, gitEmail, cancellationToken);
+        await PublishDataPackage(dataRepositoryDirectory, targetPath, extract, upstreamMd5, !options.SkipMd5Checking, md5Changed, gitHubToken, gitName,
+            gitEmail, cancellationToken);
 
         stats.GlobalTimezoneFeatureCount = features.Count;
         stopwatch.Stop();
@@ -173,9 +171,8 @@ public sealed class TimeZonesRunner
         return await _gitUtil.CloneToTempDirectory(Constants.DataRepositoryUri, gitHubToken, cancellationToken);
     }
 
-    private async ValueTask PublishDataPackage(string dataRepositoryDirectory, string targetPath, string generatedOutputPath,
-        ExtractDefinition extract, string? upstreamMd5, bool writeChecksumManifest,
-        bool pushChecksumManifest, string gitHubToken, string gitName, string gitEmail, CancellationToken cancellationToken)
+    private async ValueTask PublishDataPackage(string dataRepositoryDirectory, string targetPath, ExtractDefinition extract, string? upstreamMd5,
+        bool writeChecksumManifest, bool pushChecksumManifest, string gitHubToken, string gitName, string gitEmail, CancellationToken cancellationToken)
     {
         string version = EnvironmentUtil.GetVariableStrict("BUILD_VERSION");
         string nuGetToken = EnvironmentUtil.GetVariableStrict("NUGET__TOKEN");
@@ -185,8 +182,8 @@ public sealed class TimeZonesRunner
         if (!string.IsNullOrWhiteSpace(targetDirectory))
             await _directoryUtil.Create(targetDirectory, cancellationToken: cancellationToken);
 
-        await _fileUtil.DeleteIfExists(targetPath, cancellationToken: cancellationToken);
-        await _fileUtil.Copy(generatedOutputPath, targetPath, true, cancellationToken);
+        if (!await _fileUtil.Exists(targetPath, cancellationToken))
+            throw new FileNotFoundException($"Expected generated GeoJSON was not produced: {targetPath}", targetPath);
 
         if (writeChecksumManifest)
             await WriteChecksumManifest(dataRepositoryDirectory, extract, upstreamMd5!, cancellationToken);
