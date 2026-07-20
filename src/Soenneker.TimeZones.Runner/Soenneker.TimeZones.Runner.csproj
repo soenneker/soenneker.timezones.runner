@@ -32,6 +32,6 @@
         <PackageReference Include="Soenneker.Extensions.LoggerConfiguration" Version="4.0.1300" />
 <PackageReference Include="Soenneker.Utils.Dotnet.NuGet" Version="4.0.2027" />
         <PackageReference Include="Soenneker.Utils.Environment" Version="4.0.687" />
-<PackageReference Include="Soenneker.Utils.File.Download" Version="4.0.1656" />
+<PackageReference Include="Soenneker.Utils.File.Download" Version="4.0.1658" />
 </ItemGroup>
 </Project>
