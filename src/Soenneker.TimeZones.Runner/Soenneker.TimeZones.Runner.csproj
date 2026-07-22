@@ -28,7 +28,7 @@
         <PackageReference Include="OsmSharp" Version="6.2.0" />
         <PackageReference Include="Soenneker.Python.Util" Version="4.0.318" />
         <PackageReference Include="Soenneker.Git.Util" Version="4.0.3625" />
-        <PackageReference Include="Soenneker.GitHub.Repositories.Releases" Version="4.0.904" />
+        <PackageReference Include="Soenneker.GitHub.Repositories.Releases" Version="4.0.905" />
         <PackageReference Include="Soenneker.Extensions.LoggerConfiguration" Version="4.0.1300" />
 <PackageReference Include="Soenneker.Utils.Dotnet.NuGet" Version="4.0.2028" />
         <PackageReference Include="Soenneker.Utils.Environment" Version="4.0.687" />
