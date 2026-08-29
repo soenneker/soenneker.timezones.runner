@@ -59,11 +59,11 @@ public sealed class TimeZonesRunner
     }
 
     /// <summary>
-    /// Executes the run operation.
+    /// Runs time Zones Runner for the Time Zones Runner.
     /// </summary>
-    /// <param name="args">The args.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>A task that represents the asynchronous operation.</returns>
+    /// <param name="args">Command-line arguments passed to the application.</param>
+    /// <param name="cancellationToken">Token used to cancel the operation.</param>
+    /// <returns>A task that completes when the run operation is complete.</returns>
     public async ValueTask Run(string[] args, CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();

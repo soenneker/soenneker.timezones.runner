@@ -27,13 +27,13 @@ public sealed class OsmTimeZoneExtractor
     }
 
     /// <summary>
-    /// Executes the extract operation.
+    /// Extracts osm Time Zone Extractor.
     /// </summary>
-    /// <param name="extract">The extract.</param>
-    /// <param name="pbfPath">The pbf path.</param>
-    /// <param name="options">The options.</param>
-    /// <param name="globalPaths">The global paths.</param>
-    /// <returns>The result of the operation.</returns>
+    /// <param name="extract">Extract for the extract operation.</param>
+    /// <param name="pbfPath">Path of the pbf to use.</param>
+    /// <param name="options">Options to configure for the Osm Time Zone Extractor.</param>
+    /// <param name="globalPaths">global Paths to process.</param>
+    /// <returns>The resulting extract Stats.</returns>
     public ExtractStats Extract(ExtractDefinition extract, string pbfPath, RunnerOptions options, Dictionary<string, Paths64> globalPaths)
     {
         var stats = new ExtractStats { Name = extract.Name, CachePath = pbfPath };
@@ -122,13 +122,13 @@ public sealed class OsmTimeZoneExtractor
     }
 
     /// <summary>
-    /// Executes the extract complete operation.
+    /// Extracts complete.
     /// </summary>
-    /// <param name="extract">The extract.</param>
-    /// <param name="pbfPath">The pbf path.</param>
-    /// <param name="options">The options.</param>
-    /// <param name="globalPaths">The global paths.</param>
-    /// <returns>The result of the operation.</returns>
+    /// <param name="extract">Extract for the extract complete operation.</param>
+    /// <param name="pbfPath">Path of the pbf to use.</param>
+    /// <param name="options">Options to configure for the Osm Time Zone Extractor.</param>
+    /// <param name="globalPaths">global Paths to process.</param>
+    /// <returns>The resulting extract Stats.</returns>
     public ExtractStats ExtractComplete(ExtractDefinition extract, string pbfPath, RunnerOptions options, Dictionary<string, Paths64> globalPaths)
     {
         var stats = new ExtractStats { Name = extract.Name, CachePath = pbfPath };

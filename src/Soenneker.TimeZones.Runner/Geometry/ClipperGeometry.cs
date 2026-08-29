@@ -16,9 +16,9 @@ public static class ClipperGeometry
     /// <summary>
     /// Builds relation geometry.
     /// </summary>
-    /// <param name="outerRings">The outer rings.</param>
-    /// <param name="innerRings">The inner rings.</param>
-    /// <returns>The result of the operation.</returns>
+    /// <param name="outerRings">outer Rings to process.</param>
+    /// <param name="innerRings">inner Rings to process.</param>
+    /// <returns>The resulting paths.</returns>
     public static Paths64 BuildRelationGeometry(IEnumerable<IReadOnlyList<Coordinate>> outerRings, IEnumerable<IReadOnlyList<Coordinate>> innerRings)
     {
         Paths64 outers = ToPaths(outerRings);
@@ -37,10 +37,10 @@ public static class ClipperGeometry
     }
 
     /// <summary>
-    /// Executes the normalize operation.
+    /// Normalizes clipper Geometry.
     /// </summary>
-    /// <param name="paths">The paths.</param>
-    /// <returns>The result of the operation.</returns>
+    /// <param name="paths">Paths for the normalize operation.</param>
+    /// <returns>The resulting paths.</returns>
     public static Paths64 Normalize(Paths64 paths)
     {
         if (paths.Count == 0)
@@ -51,10 +51,10 @@ public static class ClipperGeometry
     }
 
     /// <summary>
-    /// Executes the to paths operation.
+    /// Converts to paths.
     /// </summary>
-    /// <param name="rings">The rings.</param>
-    /// <returns>The result of the operation.</returns>
+    /// <param name="rings">rings to process.</param>
+    /// <returns>The resulting paths.</returns>
     public static Paths64 ToPaths(IEnumerable<IReadOnlyList<Coordinate>> rings)
     {
         var paths = new Paths64();
@@ -76,11 +76,11 @@ public static class ClipperGeometry
     }
 
     /// <summary>
-    /// Executes the to multi polygon operation.
+    /// Converts to multi Polygon.
     /// </summary>
-    /// <param name="paths">The paths.</param>
-    /// <param name="minRingPoints">The min ring points.</param>
-    /// <returns>The result of the operation.</returns>
+    /// <param name="paths">Paths for the to multi polygon operation.</param>
+    /// <param name="minRingPoints">Min Ring Points for the to multi polygon operation.</param>
+    /// <returns>The resulting collection.</returns>
     public static List<List<List<Coordinate>>> ToMultiPolygon(Paths64 paths, int minRingPoints)
     {
         var outers = new List<Path64>();

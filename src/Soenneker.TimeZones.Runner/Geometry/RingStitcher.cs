@@ -13,11 +13,11 @@ public sealed record RingStitchResult(List<long[]> Rings, int IncompleteChainsDr
 public static class RingStitcher
 {
     /// <summary>
-    /// Executes the stitch operation.
+    /// Stitches ring Stitcher.
     /// </summary>
-    /// <param name="wayNodeIds">The way node ids.</param>
-    /// <param name="minRingPoints">The min ring points.</param>
-    /// <returns>The result of the operation.</returns>
+    /// <param name="wayNodeIds">way Node Ids to process.</param>
+    /// <param name="minRingPoints">Min Ring Points for the stitch operation.</param>
+    /// <returns>The resulting ring Stitch Result.</returns>
     public static RingStitchResult Stitch(IEnumerable<long[]> wayNodeIds, int minRingPoints)
     {
         var chains = wayNodeIds.Where(x => x.Length >= 2).Select(x => x.ToList()).ToList();

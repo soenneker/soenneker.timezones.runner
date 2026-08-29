@@ -10,10 +10,10 @@ namespace Soenneker.TimeZones.Runner.Models;
 public readonly record struct BoundingBox(double MinLat, double MaxLat, double MinLon, double MaxLon)
 {
     /// <summary>
-    /// Executes the from rings operation.
+    /// Creates from rings.
     /// </summary>
-    /// <param name="rings">The rings.</param>
-    /// <returns>The result of the operation.</returns>
+    /// <param name="rings">rings to process.</param>
+    /// <returns>The same builder instance, so additional classes or variants can be chained.</returns>
     public static BoundingBox FromRings(IEnumerable<IReadOnlyList<Coordinate>> rings)
     {
         double minLat = double.MaxValue;

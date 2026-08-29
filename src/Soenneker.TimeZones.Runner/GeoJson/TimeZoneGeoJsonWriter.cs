@@ -13,15 +13,15 @@ namespace Soenneker.TimeZones.Runner.GeoJson;
 public static class TimeZoneGeoJsonWriter
 {
     /// <summary>
-    /// Executes the write operation.
+    /// Writes time Zone Geo JSON Writer.
     /// </summary>
-    /// <param name="outputPath">The output path.</param>
-    /// <param name="features">The features.</param>
-    /// <param name="fileUtil">The file util.</param>
-    /// <param name="directoryUtil">The directory util.</param>
-    /// <param name="pathUtil">The path util.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>A task that represents the asynchronous operation.</returns>
+    /// <param name="outputPath">Path of the output to use.</param>
+    /// <param name="features">features to process.</param>
+    /// <param name="fileUtil">File Util for the write operation.</param>
+    /// <param name="directoryUtil">Directory Util for the write operation.</param>
+    /// <param name="pathUtil">Path Util for the write operation.</param>
+    /// <param name="cancellationToken">Token used to cancel the operation.</param>
+    /// <returns>A task that completes when the write operation is complete.</returns>
     public static async Task Write(string outputPath, IReadOnlyList<TimeZoneFeature> features, IFileUtil fileUtil, IDirectoryUtil directoryUtil,
         IPathUtil pathUtil, CancellationToken cancellationToken)
     {

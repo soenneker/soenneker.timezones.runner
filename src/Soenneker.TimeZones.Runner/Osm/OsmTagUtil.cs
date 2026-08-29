@@ -10,10 +10,10 @@ public static class OsmTagUtil
     /// <summary>
     /// Attempts to get value.
     /// </summary>
-    /// <param name="tags">The tags.</param>
-    /// <param name="key">The key.</param>
-    /// <param name="value">The value.</param>
-    /// <returns>A value indicating whether the operation succeeded.</returns>
+    /// <param name="tags">OSM tags to inspect.</param>
+    /// <param name="key">Key used to locate the target entry.</param>
+    /// <param name="value">Receives the matching value when the lookup succeeds.</param>
+    /// <returns>true if a matching value was found and assigned to the output parameter; otherwise, false.</returns>
     public static bool TryGetValue(TagsCollectionBase? tags, string key, out string value)
     {
         value = "";
@@ -23,8 +23,8 @@ public static class OsmTagUtil
     /// <summary>
     /// Gets time zone id.
     /// </summary>
-    /// <param name="tags">The tags.</param>
-    /// <returns>The result of the operation.</returns>
+    /// <param name="tags">OSM tags to inspect.</param>
+    /// <returns>The requested text.</returns>
     public static string? GetTimeZoneId(TagsCollectionBase? tags)
     {
         if (TryGetValue(tags, "timezone", out string timezone))
@@ -37,11 +37,11 @@ public static class OsmTagUtil
     }
 
     /// <summary>
-    /// Executes the is timezone relation operation.
+    /// Determines whether the Osm Tag timezone Relation.
     /// </summary>
-    /// <param name="tags">The tags.</param>
-    /// <param name="includeAdminBoundaries">The include admin boundaries.</param>
-    /// <returns>A value indicating whether the operation succeeded.</returns>
+    /// <param name="tags">OSM tags to inspect.</param>
+    /// <param name="includeAdminBoundaries">Whether administrative boundaries with timezone tags should also qualify.</param>
+    /// <returns>true if the tags identify a qualifying timezone relation; otherwise, false.</returns>
     public static bool IsTimezoneRelation(TagsCollectionBase? tags, bool includeAdminBoundaries)
     {
         if (tags is null)

@@ -8,10 +8,10 @@ namespace Soenneker.TimeZones.Runner.Validation;
 public static class TimeZoneDatasetValidator
 {
     /// <summary>
-    /// Executes the validate operation.
+    /// Validates the request Basic credentials against the configured username and password hash.
     /// </summary>
-    /// <param name="features">The features.</param>
-    /// <param name="minRingPoints">The min ring points.</param>
+    /// <param name="features">features to process.</param>
+    /// <param name="minRingPoints">Min Ring Points for the validate operation.</param>
     public static void Validate(IReadOnlyCollection<TimeZoneFeature> features, int minRingPoints)
     {
         foreach (TimeZoneFeature feature in features)
