@@ -99,70 +99,77 @@ public sealed class TimeZonesRunner
         await _directoryUtil.Create(cacheDirectory, cancellationToken: cancellationToken);
 
         string dataRepositoryDirectory = await CloneDataRepository(gitHubToken, cancellationToken);
-        string targetPath = ResolveDataRepositoryPath(dataRepositoryDirectory, options.OutputPath);
-        _logger.LogInformation("Data repository output path: {DataRepositoryOutputPath}", targetPath);
-        await _fileUtil.DeleteIfExists(targetPath, cancellationToken: cancellationToken);
-
-        string? previousMd5 = options.SkipMd5Checking ? null : await LoadPreviousChecksum(dataRepositoryDirectory, extract, cancellationToken);
-        string? upstreamMd5 = options.SkipMd5Checking ? null : await DownloadExtractMd5(extract, cancellationToken);
-        bool md5Changed = !options.SkipMd5Checking && !string.Equals(previousMd5, upstreamMd5, StringComparison.OrdinalIgnoreCase);
-
-        if (!options.SkipMd5Checking && !options.ForceDownload && !md5Changed)
+        try
         {
-            _logger.LogInformation("Extract MD5 matches the data repository checksum manifest; skipping PBF download and generation.");
-            return;
+            string targetPath = ResolveDataRepositoryPath(dataRepositoryDirectory, options.OutputPath);
+            _logger.LogInformation("Data repository output path: {DataRepositoryOutputPath}", targetPath);
+            await _fileUtil.DeleteIfExists(targetPath, cancellationToken: cancellationToken);
+
+            string? previousMd5 = options.SkipMd5Checking ? null : await LoadPreviousChecksum(dataRepositoryDirectory, extract, cancellationToken);
+            string? upstreamMd5 = options.SkipMd5Checking ? null : await DownloadExtractMd5(extract, cancellationToken);
+            bool md5Changed = !options.SkipMd5Checking && !string.Equals(previousMd5, upstreamMd5, StringComparison.OrdinalIgnoreCase);
+
+            if (!options.SkipMd5Checking && !options.ForceDownload && !md5Changed)
+            {
+                _logger.LogInformation("Extract MD5 matches the data repository checksum manifest; skipping PBF download and generation.");
+                return;
+            }
+
+            string cachePath = Path.Combine(cacheDirectory, extract.CacheFileName);
+            bool downloaded = await EnsureExtract(extract, cachePath, options.ForceDownload || md5Changed, cancellationToken);
+
+            if (downloaded)
+                stats.ExtractsDownloaded++;
+            else
+                stats.ExtractsReused++;
+
+            _logger.LogInformation(
+                "Processing extract {ExtractName}. Url: {ExtractUrl}. Cache path: {CachePath}. Upstream MD5: {UpstreamMd5}. MD5 changed: {Md5Changed}. Download: {DownloadStatus}",
+                extract.Name, extract.Url, cachePath, upstreamMd5 ?? "(skipped)", md5Changed,
+                downloaded ? "performed" : "skipped, reused cached file");
+
+            string processingPath = cachePath;
+
+            if (options.UsePyosmiumPrefilter)
+                processingPath = await pyosmiumPrefilter.EnsureFilteredExtract(extract, cachePath, options, toolsDirectory,
+                    options.ForceDownload || md5Changed || downloaded, cancellationToken);
+
+            ExtractStats extractStats = (options.UsePyosmiumPrefilter
+                ? extractor.ExtractComplete(extract, processingPath, options, globalPaths)
+                : extractor.Extract(extract, processingPath, options, globalPaths)) with
+            {
+                Downloaded = downloaded,
+                Md5Changed = md5Changed,
+                UpstreamMd5 = upstreamMd5
+            };
+            stats.PerExtract.Add(extractStats);
+            stats.ExtractsProcessed++;
+
+            _logger.LogInformation(
+                "Extract {ExtractName} complete. Relations scanned: {RelationsScanned}. Timezone relations found: {TimezoneRelationsFound}. Ways loaded: {WaysLoaded}. Nodes loaded: {NodesLoaded}. Incomplete rings dropped: {IncompleteRingsDropped}",
+                extractStats.Name, extractStats.RelationsScanned, extractStats.TimezoneRelationsFound, extractStats.WaysLoaded, extractStats.NodesLoaded,
+                extractStats.IncompleteRingsDropped);
+
+            List<TimeZoneFeature> features = BuildFeatures(globalPaths, options.MinRingPoints);
+            TimeZoneDatasetValidator.Validate(features, options.MinRingPoints);
+
+            await TimeZoneGeoJsonWriter.Write(targetPath, features, _fileUtil, _directoryUtil, _pathUtil, cancellationToken);
+
+            await PublishDataPackage(dataRepositoryDirectory, targetPath, extract, upstreamMd5, !options.SkipMd5Checking, md5Changed, gitHubToken, gitName,
+                gitEmail, cancellationToken);
+
+            stats.GlobalTimezoneFeatureCount = features.Count;
+            stopwatch.Stop();
+
+            _logger.LogInformation(
+                "Global summary. Extracts configured: {ExtractsConfigured}. Extracts downloaded: {ExtractsDownloaded}. Extracts reused: {ExtractsReused}. Extracts processed: {ExtractsProcessed}. Global timezone feature count: {GlobalTimezoneFeatureCount}. Global incomplete ring count: {GlobalIncompleteRingCount}. Features written: {FeaturesWritten}. Elapsed time: {ElapsedTime}",
+                stats.ExtractsConfigured, stats.ExtractsDownloaded, stats.ExtractsReused, stats.ExtractsProcessed, stats.GlobalTimezoneFeatureCount,
+                stats.GlobalIncompleteRingCount, features.Count, stopwatch.Elapsed);
         }
-
-        string cachePath = Path.Combine(cacheDirectory, extract.CacheFileName);
-        bool downloaded = await EnsureExtract(extract, cachePath, options.ForceDownload || md5Changed, cancellationToken);
-
-        if (downloaded)
-            stats.ExtractsDownloaded++;
-        else
-            stats.ExtractsReused++;
-
-        _logger.LogInformation(
-            "Processing extract {ExtractName}. Url: {ExtractUrl}. Cache path: {CachePath}. Upstream MD5: {UpstreamMd5}. MD5 changed: {Md5Changed}. Download: {DownloadStatus}",
-            extract.Name, extract.Url, cachePath, upstreamMd5 ?? "(skipped)", md5Changed,
-            downloaded ? "performed" : "skipped, reused cached file");
-
-        string processingPath = cachePath;
-
-        if (options.UsePyosmiumPrefilter)
-            processingPath = await pyosmiumPrefilter.EnsureFilteredExtract(extract, cachePath, options, toolsDirectory,
-                options.ForceDownload || md5Changed || downloaded, cancellationToken);
-
-        ExtractStats extractStats = (options.UsePyosmiumPrefilter
-            ? extractor.ExtractComplete(extract, processingPath, options, globalPaths)
-            : extractor.Extract(extract, processingPath, options, globalPaths)) with
+        finally
         {
-            Downloaded = downloaded,
-            Md5Changed = md5Changed,
-            UpstreamMd5 = upstreamMd5
-        };
-        stats.PerExtract.Add(extractStats);
-        stats.ExtractsProcessed++;
-
-        _logger.LogInformation(
-            "Extract {ExtractName} complete. Relations scanned: {RelationsScanned}. Timezone relations found: {TimezoneRelationsFound}. Ways loaded: {WaysLoaded}. Nodes loaded: {NodesLoaded}. Incomplete rings dropped: {IncompleteRingsDropped}",
-            extractStats.Name, extractStats.RelationsScanned, extractStats.TimezoneRelationsFound, extractStats.WaysLoaded, extractStats.NodesLoaded,
-            extractStats.IncompleteRingsDropped);
-
-        List<TimeZoneFeature> features = BuildFeatures(globalPaths, options.MinRingPoints);
-        TimeZoneDatasetValidator.Validate(features, options.MinRingPoints);
-
-        await TimeZoneGeoJsonWriter.Write(targetPath, features, _fileUtil, _directoryUtil, _pathUtil, cancellationToken);
-
-        await PublishDataPackage(dataRepositoryDirectory, targetPath, extract, upstreamMd5, !options.SkipMd5Checking, md5Changed, gitHubToken, gitName,
-            gitEmail, cancellationToken);
-
-        stats.GlobalTimezoneFeatureCount = features.Count;
-        stopwatch.Stop();
-
-        _logger.LogInformation(
-            "Global summary. Extracts configured: {ExtractsConfigured}. Extracts downloaded: {ExtractsDownloaded}. Extracts reused: {ExtractsReused}. Extracts processed: {ExtractsProcessed}. Global timezone feature count: {GlobalTimezoneFeatureCount}. Global incomplete ring count: {GlobalIncompleteRingCount}. Features written: {FeaturesWritten}. Elapsed time: {ElapsedTime}",
-            stats.ExtractsConfigured, stats.ExtractsDownloaded, stats.ExtractsReused, stats.ExtractsProcessed, stats.GlobalTimezoneFeatureCount,
-            stats.GlobalIncompleteRingCount, features.Count, stopwatch.Elapsed);
+            await _directoryUtil.DeleteIfExists(dataRepositoryDirectory, CancellationToken.None);
+        }
     }
 
     private async ValueTask<string> CloneDataRepository(string gitHubToken, CancellationToken cancellationToken)
