@@ -1,9 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
 using Soenneker.TimeZones.Runner.Models;
-using Soenneker.Utils.Directory.Abstract;
 using Soenneker.Utils.File.Abstract;
-using Soenneker.Utils.Path.Abstract;
 
 namespace Soenneker.TimeZones.Runner.GeoJson;
 
@@ -18,21 +16,12 @@ public static class TimeZoneGeoJsonWriter
     /// <param name="outputPath">Path of the output to use.</param>
     /// <param name="features">features to process.</param>
     /// <param name="fileUtil">File Util for the write operation.</param>
-    /// <param name="directoryUtil">Directory Util for the write operation.</param>
-    /// <param name="pathUtil">Path Util for the write operation.</param>
     /// <param name="cancellationToken">Token used to cancel the operation.</param>
     /// <returns>A task that completes when the write operation is complete.</returns>
-    public static async Task Write(string outputPath, IReadOnlyList<TimeZoneFeature> features, IFileUtil fileUtil, IDirectoryUtil directoryUtil,
-        IPathUtil pathUtil, CancellationToken cancellationToken)
+    public static async Task Write(string outputPath, IReadOnlyList<TimeZoneFeature> features, IFileUtil fileUtil, CancellationToken cancellationToken)
     {
         string fullOutputPath = Path.GetFullPath(outputPath);
-        string directory = Path.GetDirectoryName(fullOutputPath)!;
-
-        await directoryUtil.Create(directory, cancellationToken: cancellationToken);
-
-        string tempPath = await pathUtil.GetRandomUniqueFilePath(directory, ".tmp", cancellationToken);
-
-        await using (FileStream stream = fileUtil.OpenWrite(tempPath))
+        await fileUtil.WriteAtomically(fullOutputPath, async (stream, ct) =>
         {
             await using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = false });
 
@@ -47,13 +36,8 @@ public static class TimeZoneGeoJsonWriter
             writer.WriteEndArray();
             writer.WriteEndObject();
 
-            await writer.FlushAsync(cancellationToken);
-        }
-
-        await fileUtil.DeleteIfExists(fullOutputPath, cancellationToken: cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-
-        File.Move(tempPath, fullOutputPath);
+            await writer.FlushAsync(ct);
+        }, log: false, cancellationToken);
     }
 
     private static void WriteFeature(Utf8JsonWriter writer, TimeZoneFeature feature)

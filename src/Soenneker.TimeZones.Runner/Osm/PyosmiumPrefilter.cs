@@ -160,7 +160,7 @@ public sealed class PyosmiumPrefilter
         string scriptPath = Path.Combine(scriptDirectory, "prefilter_timezones.py");
 
         await _directoryUtil.Create(scriptDirectory, cancellationToken: cancellationToken);
-        await File.WriteAllTextAsync(scriptPath, _script, cancellationToken);
+        await _fileUtil.Write(scriptPath, _script, log: false, cancellationToken);
 
         return scriptPath;
     }

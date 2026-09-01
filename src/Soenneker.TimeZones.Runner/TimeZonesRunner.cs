@@ -153,7 +153,7 @@ public sealed class TimeZonesRunner
             List<TimeZoneFeature> features = BuildFeatures(globalPaths, options.MinRingPoints);
             TimeZoneDatasetValidator.Validate(features, options.MinRingPoints);
 
-            await TimeZoneGeoJsonWriter.Write(targetPath, features, _fileUtil, _directoryUtil, _pathUtil, cancellationToken);
+            await TimeZoneGeoJsonWriter.Write(targetPath, features, _fileUtil, cancellationToken);
 
             await PublishDataPackage(dataRepositoryDirectory, targetPath, extract, upstreamMd5, !options.SkipMd5Checking, md5Changed, gitHubToken, gitName,
                 gitEmail, cancellationToken);
