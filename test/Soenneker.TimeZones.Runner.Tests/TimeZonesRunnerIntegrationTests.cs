@@ -31,7 +31,7 @@ public sealed class TimeZonesRunnerIntegrationTests : HostedUnitTest
     }
 
     [Test]
-    public async Task Antarctica_pbf_runs_through_pyosmium_pipeline()
+    public async Task Antarctica_pbf_runs_through_pyosmium_pipeline(CancellationToken cancellationToken)
     {
         if (!string.Equals(Environment.GetEnvironmentVariable(_runIntegrationEnvironmentVariable), "true", StringComparison.OrdinalIgnoreCase))
             return;
@@ -66,7 +66,7 @@ public sealed class TimeZonesRunnerIntegrationTests : HostedUnitTest
             };
 
             var prefilter = new PyosmiumPrefilter(fileUtil, directoryUtil, pythonUtil, processUtil, loggerFactory.CreateLogger<PyosmiumPrefilter>());
-            string filteredPath = await prefilter.EnsureFilteredExtract(extract, pbfPath, options, toolsDirectory, force: true, CancellationToken.None);
+            string filteredPath = await prefilter.EnsureFilteredExtract(extract, pbfPath, options, toolsDirectory, force: true, cancellationToken);
 
             await Assert.That(await fileUtil.Exists(filteredPath)).IsTrue();
 
@@ -78,7 +78,7 @@ public sealed class TimeZonesRunnerIntegrationTests : HostedUnitTest
             TimeZoneDatasetValidator.Validate(features, options.MinRingPoints);
 
             string outputPath = Path.Combine(integrationDirectory, "antarctica-timezones.geojson");
-            await TimeZoneGeoJsonWriter.Write(outputPath, features, fileUtil, directoryUtil, pathUtil, CancellationToken.None);
+            await TimeZoneGeoJsonWriter.Write(outputPath, features, fileUtil, cancellationToken);
 
             await Assert.That(stats.TimezoneRelationsFound).IsGreaterThan(0);
             await Assert.That(stats.WaysLoaded).IsGreaterThan(0);
