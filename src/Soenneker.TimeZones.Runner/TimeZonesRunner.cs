@@ -27,6 +27,9 @@ namespace Soenneker.TimeZones.Runner;
 /// </summary>
 public sealed class TimeZonesRunner
 {
+    private static readonly JsonSerializerOptions _caseInsensitiveSerializerOptions = new() { PropertyNameCaseInsensitive = true };
+    private static readonly JsonSerializerOptions _indentedSerializerOptions = new() { WriteIndented = true };
+
     private readonly IFileDownloadUtil _fileDownloadUtil;
     private readonly IGitUtil _gitUtil;
     private readonly IFileUtil _fileUtil;
@@ -313,8 +316,7 @@ public sealed class TimeZonesRunner
             return null;
 
         await using FileStream stream = _fileUtil.OpenRead(path);
-        ExtractManifest? manifest = await JsonSerializer.DeserializeAsync<ExtractManifest>(stream,
-            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }, cancellationToken);
+        ExtractManifest? manifest = await JsonSerializer.DeserializeAsync<ExtractManifest>(stream, _caseInsensitiveSerializerOptions, cancellationToken);
 
         return manifest?.Extracts.FirstOrDefault(x => string.Equals(x.CacheFileName, extract.CacheFileName, StringComparison.Ordinal))?.Md5;
     }
@@ -333,7 +335,7 @@ public sealed class TimeZonesRunner
             Extracts = [extract with { Md5 = upstreamMd5 }]
         };
 
-        string json = JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true });
+        string json = JsonSerializer.Serialize(manifest, _indentedSerializerOptions);
         await _fileUtil.Write(path, json + Environment.NewLine, cancellationToken: cancellationToken);
     }
 
@@ -363,8 +365,7 @@ public sealed class TimeZonesRunner
             string path = ResolvePath(repoRoot, options.ExtractListPath);
             await using FileStream stream = _fileUtil.OpenRead(path);
             ExtractManifest? manifest =
-                await JsonSerializer.DeserializeAsync<ExtractManifest>(stream, new JsonSerializerOptions { PropertyNameCaseInsensitive = true },
-                    cancellationToken);
+                await JsonSerializer.DeserializeAsync<ExtractManifest>(stream, _caseInsensitiveSerializerOptions, cancellationToken);
             return manifest ?? throw new InvalidOperationException($"Extract manifest '{path}' could not be read.");
         }
 
