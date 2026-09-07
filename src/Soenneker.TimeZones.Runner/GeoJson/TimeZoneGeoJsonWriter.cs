@@ -79,8 +79,8 @@ public static class TimeZoneGeoJsonWriter
                 foreach (Coordinate coordinate in ring)
                 {
                     writer.WriteStartArray();
-                    writer.WriteRawValue(Format(coordinate.Longitude), skipInputValidation: true);
-                    writer.WriteRawValue(Format(coordinate.Latitude), skipInputValidation: true);
+                    WriteCoordinate(writer, coordinate.Longitude);
+                    WriteCoordinate(writer, coordinate.Latitude);
                     writer.WriteEndArray();
                 }
 
@@ -93,9 +93,13 @@ public static class TimeZoneGeoJsonWriter
         writer.WriteEndArray();
     }
 
-    private static string Format(double value)
+    private static void WriteCoordinate(Utf8JsonWriter writer, double value)
     {
         value = Math.Round(value, 7, MidpointRounding.AwayFromZero);
-        return value.ToString("0.#######", CultureInfo.InvariantCulture);
+        Span<byte> buffer = stackalloc byte[64];
+        if (value.TryFormat(buffer, out int written, "0.#######", CultureInfo.InvariantCulture))
+            writer.WriteRawValue(buffer[..written], skipInputValidation: true);
+        else
+            writer.WriteRawValue(value.ToString("0.#######", CultureInfo.InvariantCulture), skipInputValidation: true);
     }
 }

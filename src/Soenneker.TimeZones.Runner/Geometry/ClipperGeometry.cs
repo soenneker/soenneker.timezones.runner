@@ -153,7 +153,10 @@ public static class ClipperGeometry
 
     private static List<Coordinate> ToRing(Path64 path)
     {
-        var ring = path.Select(ToCoordinate).ToList();
+        bool needsClosingPoint = path.Count > 0 && ToCoordinate(path[0]) != ToCoordinate(path[^1]);
+        var ring = new List<Coordinate>(path.Count + (needsClosingPoint ? 1 : 0));
+        foreach (Point64 point in path)
+            ring.Add(ToCoordinate(point));
 
         if (ring.Count > 0 && ring[0] != ring[^1])
             ring.Add(ring[0]);

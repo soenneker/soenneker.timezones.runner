@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 namespace Soenneker.TimeZones.Runner.Geometry;
 
 /// <summary>
@@ -66,27 +67,27 @@ public static class RingStitcher
 
         if (chainLast == candidateFirst)
         {
-            chain.AddRange(candidate.Skip(1));
+            chain.AddRange(CollectionsMarshal.AsSpan(candidate)[1..]);
             return true;
         }
 
         if (chainLast == candidateLast)
         {
             candidate.Reverse();
-            chain.AddRange(candidate.Skip(1));
+            chain.AddRange(CollectionsMarshal.AsSpan(candidate)[1..]);
             return true;
         }
 
         if (chainFirst == candidateLast)
         {
-            chain.InsertRange(0, candidate.Take(candidate.Count - 1));
+            chain.InsertRange(0, CollectionsMarshal.AsSpan(candidate)[..^1]);
             return true;
         }
 
         if (chainFirst == candidateFirst)
         {
             candidate.Reverse();
-            chain.InsertRange(0, candidate.Take(candidate.Count - 1));
+            chain.InsertRange(0, CollectionsMarshal.AsSpan(candidate)[..^1]);
             return true;
         }
 
