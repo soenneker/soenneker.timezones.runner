@@ -8,6 +8,10 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
 
   daily-automatic-update:
@@ -75,6 +79,12 @@ jobs:
       - name: Build
         run: dotnet build --configuration Release --no-restore
 
+      - name: Log in to NuGet
+        uses: NuGet/login@v1
+        id: nuget-login
+        with:
+          user: soenneker
+
       - name: Run
         run: dotnet run --project src/Soenneker.TimeZones.Runner/Soenneker.TimeZones.Runner.csproj --no-restore --verbosity normal --framework net10.0 -c Release
         env:
@@ -83,4 +93,4 @@ jobs:
           GIT__TOKEN: ${{ secrets.GIT__TOKEN }}
           GIT__NAME: ${{ secrets.GIT__NAME }}
           GIT__EMAIL: ${{ secrets.GIT__EMAIL }}
-          NUGET__TOKEN: ${{ secrets.NUGET__TOKEN }}
+          NUGET__TOKEN: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
