@@ -26,12 +26,12 @@
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.12" />
         <PackageReference Include="Clipper2" Version="2.0.0" />
         <PackageReference Include="OsmSharp" Version="6.2.0" />
-        <PackageReference Include="Soenneker.Python.Util" Version="4.0.404" />
-        <PackageReference Include="Soenneker.Git.Util" Version="4.0.3779" />
-        <PackageReference Include="Soenneker.GitHub.Repositories.Releases" Version="4.0.1025" />
-        <PackageReference Include="Soenneker.Extensions.LoggerConfiguration" Version="4.0.1381" />
-<PackageReference Include="Soenneker.Utils.Dotnet.NuGet" Version="4.0.2098" />
-        <PackageReference Include="Soenneker.Utils.Environment" Version="4.0.744" />
-<PackageReference Include="Soenneker.Utils.File.Download" Version="4.0.1748" />
+        <PackageReference Include="Soenneker.Python.Util" Version="4.0.405" />
+        <PackageReference Include="Soenneker.Git.Util" Version="4.0.3782" />
+        <PackageReference Include="Soenneker.GitHub.Repositories.Releases" Version="4.0.1029" />
+        <PackageReference Include="Soenneker.Extensions.LoggerConfiguration" Version="4.0.1382" />
+<PackageReference Include="Soenneker.Utils.Dotnet.NuGet" Version="4.0.2100" />
+        <PackageReference Include="Soenneker.Utils.Environment" Version="4.0.747" />
+<PackageReference Include="Soenneker.Utils.File.Download" Version="4.0.1754" />
 </ItemGroup>
 </Project>
