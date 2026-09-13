@@ -27,8 +27,8 @@
         <PackageReference Include="Clipper2" Version="2.0.0" />
         <PackageReference Include="OsmSharp" Version="6.2.0" />
         <PackageReference Include="Soenneker.Python.Util" Version="4.0.405" />
-        <PackageReference Include="Soenneker.Git.Util" Version="4.0.3782" />
-        <PackageReference Include="Soenneker.GitHub.Repositories.Releases" Version="4.0.1029" />
+        <PackageReference Include="Soenneker.Git.Util" Version="4.0.3783" />
+        <PackageReference Include="Soenneker.GitHub.Repositories.Releases" Version="4.0.1030" />
         <PackageReference Include="Soenneker.Extensions.LoggerConfiguration" Version="4.0.1382" />
 <PackageReference Include="Soenneker.Utils.Dotnet.NuGet" Version="4.0.2100" />
         <PackageReference Include="Soenneker.Utils.Environment" Version="4.0.747" />
