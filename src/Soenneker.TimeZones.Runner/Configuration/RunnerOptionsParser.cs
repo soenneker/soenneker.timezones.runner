@@ -20,6 +20,8 @@ public static class RunnerOptionsParser
 
             options = arg switch
             {
+                "--prepare-publication" => options with { PreparePublication = ReadValue(args, ref i, arg) },
+                "--publish-publication" => options with { PublishPublication = ReadValue(args, ref i, arg) },
                 "--scope" => options with { Scope = ReadValue(args, ref i, arg).ToLowerInvariant() },
                 "--extract-url" => options with { ExtractUrl = ReadValue(args, ref i, arg) },
                 "--extract-list" => options with { ExtractListPath = ReadValue(args, ref i, arg) },
@@ -38,6 +40,13 @@ public static class RunnerOptionsParser
                 _ => throw new ArgumentException($"Unknown argument '{arg}'.")
             };
         }
+
+        if (options.PreparePublication is not null && options.PublishPublication is not null)
+            throw new ArgumentException("--prepare-publication and --publish-publication cannot be combined.");
+
+        if (options.PreparePublication is not null && string.IsNullOrWhiteSpace(options.PreparePublication) ||
+            options.PublishPublication is not null && string.IsNullOrWhiteSpace(options.PublishPublication))
+            throw new ArgumentException("Publication state paths must not be empty.");
 
         if (options.Scope is not ("world" or "continent" or "url"))
             throw new ArgumentException("--scope must be one of: world, continent, url.");

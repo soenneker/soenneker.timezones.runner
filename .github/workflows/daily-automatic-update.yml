@@ -79,14 +79,30 @@ jobs:
       - name: Build
         run: dotnet build --configuration Release --no-restore
 
+      - name: Generate and pack dataset
+        id: prepare
+        run: |
+          dotnet run --project src/Soenneker.TimeZones.Runner/Soenneker.TimeZones.Runner.csproj --no-build --no-restore --framework net10.0 -c Release -- --prepare-publication artifacts/publication.json
+          if [ -f artifacts/publication.json ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "package_path=$(jq -r '.PackagePath' artifacts/publication.json)" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH__TOKEN: ${{ secrets.GH__TOKEN }}
+          GIT__NAME: ${{ secrets.GIT__NAME }}
+          GIT__EMAIL: ${{ secrets.GIT__EMAIL }}
+
+      # Request the one-hour credential only after downloading, filtering and packing.
       - name: Log in to NuGet
+        if: steps.prepare.outputs.ready == 'true'
         uses: NuGet/login@v1
         id: nuget-login
         with:
           user: soenneker
 
-      - name: Run
-        run: dotnet run --project src/Soenneker.TimeZones.Runner/Soenneker.TimeZones.Runner.csproj --no-restore --verbosity normal --framework net10.0 -c Release
+      - name: Publish prepared dataset
+        if: steps.prepare.outputs.ready == 'true'
+        run: dotnet run --project src/Soenneker.TimeZones.Runner/Soenneker.TimeZones.Runner.csproj --no-build --no-restore --framework net10.0 -c Release -- --publish-publication artifacts/publication.json
         env:
           GH__USERNAME: ${{ secrets.GH__USERNAME }}
           GH__TOKEN: ${{ secrets.GH__TOKEN }}
@@ -94,3 +110,11 @@ jobs:
           GIT__NAME: ${{ secrets.GIT__NAME }}
           GIT__EMAIL: ${{ secrets.GIT__EMAIL }}
           NUGET__TOKEN: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+
+      - name: Preserve package if publication fails
+        if: failure() && steps.prepare.outputs.ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: timezone-package-${{ env.BUILD_VERSION }}
+          path: ${{ steps.prepare.outputs.package_path }}
+          if-no-files-found: error

@@ -6,6 +6,16 @@ namespace Soenneker.TimeZones.Runner.Configuration;
 public sealed record RunnerOptions
 {
     /// <summary>
+    /// Writes a prepared publication to this state file without publishing it.
+    /// </summary>
+    public string? PreparePublication { get; init; }
+
+    /// <summary>
+    /// Publishes the package described by this state file without regenerating it.
+    /// </summary>
+    public string? PublishPublication { get; init; }
+
+    /// <summary>
     /// Gets or sets scope.
     /// </summary>
     public string Scope { get; init; } = "world";

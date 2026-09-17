@@ -78,6 +78,21 @@ public sealed class TimeZonesRunner
         string gitName = EnvironmentUtil.GetVariableStrict("GIT__NAME");
         string gitEmail = EnvironmentUtil.GetVariableStrict("GIT__EMAIL");
 
+        if (options.PublishPublication is not null)
+        {
+            string statePath = ResolvePath(runnerRepoRoot, options.PublishPublication);
+            string json = await _fileUtil.Read(statePath, cancellationToken: cancellationToken);
+            PreparedPublication publication = JsonSerializer.Deserialize<PreparedPublication>(json)
+                ?? throw new InvalidOperationException($"Invalid publication state: {statePath}");
+            await PublishPreparedPackage(publication, gitHubToken, gitName, gitEmail, cancellationToken);
+            await _fileUtil.DeleteIfExists(statePath, cancellationToken: cancellationToken);
+            return;
+        }
+
+        string? prepareStatePath = options.PreparePublication is null ? null : ResolvePath(runnerRepoRoot, options.PreparePublication);
+        if (prepareStatePath is not null)
+            await _fileUtil.DeleteIfExists(prepareStatePath, cancellationToken: cancellationToken);
+
         ExtractManifest manifest = await LoadManifest(options, runnerRepoRoot, cancellationToken);
         List<ExtractDefinition> extracts = manifest.Extracts.Where(static x => x.Enabled).OrderBy(static x => x.Name, StringComparer.Ordinal).ToList();
 
@@ -102,6 +117,7 @@ public sealed class TimeZonesRunner
         await _directoryUtil.Create(cacheDirectory, cancellationToken: cancellationToken);
 
         string dataRepositoryDirectory = await CloneDataRepository(gitHubToken, cancellationToken);
+        bool retainPreparedRepository = false;
         try
         {
             string targetPath = ResolveDataRepositoryPath(dataRepositoryDirectory, options.OutputPath);
@@ -158,8 +174,22 @@ public sealed class TimeZonesRunner
 
             await TimeZoneGeoJsonWriter.Write(targetPath, features, _fileUtil, cancellationToken);
 
-            await PublishDataPackage(dataRepositoryDirectory, targetPath, extract, upstreamMd5, !options.SkipMd5Checking, md5Changed, gitHubToken, gitName,
-                gitEmail, cancellationToken);
+            PreparedPublication publication = await PrepareDataPackage(dataRepositoryDirectory, targetPath, extract, upstreamMd5,
+                !options.SkipMd5Checking, md5Changed, cancellationToken);
+
+            if (prepareStatePath is not null)
+            {
+                await _directoryUtil.Create(Path.GetDirectoryName(prepareStatePath)!, cancellationToken: cancellationToken);
+                await _fileUtil.Write(prepareStatePath, JsonSerializer.Serialize(publication, _indentedSerializerOptions),
+                    cancellationToken: cancellationToken);
+                retainPreparedRepository = true;
+                _logger.LogInformation("Package prepared. Publication state: {StatePath}. Repository retained at {RepositoryDirectory}.",
+                    prepareStatePath, dataRepositoryDirectory);
+            }
+            else
+            {
+                await PublishPreparedPackage(publication, gitHubToken, gitName, gitEmail, cancellationToken);
+            }
 
             stats.GlobalTimezoneFeatureCount = features.Count;
             stopwatch.Stop();
@@ -171,7 +201,8 @@ public sealed class TimeZonesRunner
         }
         finally
         {
-            await _directoryUtil.DeleteIfExists(dataRepositoryDirectory, CancellationToken.None);
+            if (!retainPreparedRepository)
+                await _directoryUtil.DeleteIfExists(dataRepositoryDirectory, CancellationToken.None);
         }
     }
 
@@ -181,12 +212,12 @@ public sealed class TimeZonesRunner
         return await _gitUtil.CloneToTempDirectory(Constants.DataRepositoryUri, gitHubToken, cancellationToken);
     }
 
-    private async ValueTask PublishDataPackage(string dataRepositoryDirectory, string targetPath, ExtractDefinition extract, string? upstreamMd5,
-        bool writeChecksumManifest, bool pushChecksumManifest, string gitHubToken, string gitName, string gitEmail, CancellationToken cancellationToken)
+    internal sealed record PreparedPublication(string RepositoryDirectory, string TargetPath, string PackagePath, string Version, bool PushChecksumManifest);
+
+    private async ValueTask<PreparedPublication> PrepareDataPackage(string dataRepositoryDirectory, string targetPath, ExtractDefinition extract, string? upstreamMd5,
+        bool writeChecksumManifest, bool pushChecksumManifest, CancellationToken cancellationToken)
     {
         string version = EnvironmentUtil.GetVariableStrict("BUILD_VERSION");
-        string nuGetToken = EnvironmentUtil.GetVariableStrict("NUGET__TOKEN");
-        string gitHubUsername = EnvironmentUtil.GetVariableStrict("GH__USERNAME");
         string? targetDirectory = Path.GetDirectoryName(targetPath);
 
         if (!string.IsNullOrWhiteSpace(targetDirectory))
@@ -221,6 +252,19 @@ public sealed class TimeZonesRunner
 
         if (!await _fileUtil.Exists(packagePath, cancellationToken))
             throw new FileNotFoundException($"Expected package was not produced: {packagePath}", packagePath);
+
+        return new PreparedPublication(dataRepositoryDirectory, targetPath, packagePath, version, pushChecksumManifest);
+    }
+
+    private async ValueTask PublishPreparedPackage(PreparedPublication publication, string gitHubToken, string gitName, string gitEmail,
+        CancellationToken cancellationToken)
+    {
+        (string dataRepositoryDirectory, string targetPath, string packagePath, string version, bool pushChecksumManifest) = publication;
+        string nuGetToken = EnvironmentUtil.GetVariableStrict("NUGET__TOKEN");
+        string gitHubUsername = EnvironmentUtil.GetVariableStrict("GH__USERNAME");
+
+        if (!await _fileUtil.Exists(packagePath, cancellationToken))
+            throw new FileNotFoundException($"Prepared package was not found: {packagePath}", packagePath);
 
         _logger.LogInformation("Publishing {PackagePath} to NuGet.", packagePath);
 
