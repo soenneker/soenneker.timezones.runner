@@ -23,11 +23,14 @@ namespace Soenneker.TimeZones.Runner.Tests;
 [ClassDataSource<Host>(Shared = SharedType.PerTestSession)]
 public sealed class TimeZonesRunnerIntegrationTests : HostedUnitTest
 {
+    private readonly IFileUtil _fileUtil;
+
     private const string _runIntegrationEnvironmentVariable = "RUN_TIMEZONE_PBF_INTEGRATION_TEST";
     private const string _antarcticaPbfUrl = "https://download.geofabrik.de/antarctica-latest.osm.pbf";
 
     public TimeZonesRunnerIntegrationTests(Host host) : base(host)
     {
+        _fileUtil = Resolve<IFileUtil>(true);
     }
 
     [Test]
@@ -92,13 +95,13 @@ public sealed class TimeZonesRunnerIntegrationTests : HostedUnitTest
         }
     }
 
-    private static async ValueTask Download(string url, string destinationPath)
+    private async ValueTask Download(string url, string destinationPath)
     {
         using var client = new HttpClient();
         client.DefaultRequestHeaders.UserAgent.ParseAdd("Soenneker.TimeZones.Runner.Tests");
 
         await using Stream responseStream = await client.GetStreamAsync(url);
-        await using FileStream destinationStream = File.Create(destinationPath);
+        await using FileStream destinationStream = _fileUtil.OpenWrite(destinationPath);
         await responseStream.CopyToAsync(destinationStream);
     }
 }
