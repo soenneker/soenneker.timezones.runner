@@ -30,7 +30,7 @@
         <PackageReference Include="Soenneker.Git.Util" Version="4.0.3820" />
         <PackageReference Include="Soenneker.GitHub.Repositories.Releases" Version="4.0.1057" />
         <PackageReference Include="Soenneker.Extensions.LoggerConfiguration" Version="4.0.1404" />
-<PackageReference Include="Soenneker.Utils.Dotnet.NuGet" Version="4.0.2119" />
+<PackageReference Include="Soenneker.Utils.Dotnet.NuGet" Version="4.0.2121" />
         <PackageReference Include="Soenneker.Utils.Environment" Version="4.0.759" />
 <PackageReference Include="Soenneker.Utils.File.Download" Version="4.0.1783" />
 </ItemGroup>
