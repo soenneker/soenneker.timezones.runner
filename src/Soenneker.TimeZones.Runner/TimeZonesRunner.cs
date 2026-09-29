@@ -82,7 +82,7 @@ public sealed class TimeZonesRunner
         {
             string statePath = ResolvePath(runnerRepoRoot, options.PublishPublication);
             string json = await _fileUtil.Read(statePath, cancellationToken: cancellationToken);
-            PreparedPublication publication = JsonSerializer.Deserialize<PreparedPublication>(json)
+            PreparedPublication publication = JsonSerializer.Deserialize(json, AotJsonContext.Get<PreparedPublication>())
                 ?? throw new InvalidOperationException($"Invalid publication state: {statePath}");
             await PublishPreparedPackage(publication, gitHubToken, gitName, gitEmail, cancellationToken);
             await _fileUtil.DeleteIfExists(statePath, cancellationToken: cancellationToken);
@@ -180,7 +180,7 @@ public sealed class TimeZonesRunner
             if (prepareStatePath is not null)
             {
                 await _directoryUtil.Create(Path.GetDirectoryName(prepareStatePath)!, cancellationToken: cancellationToken);
-                await _fileUtil.Write(prepareStatePath, JsonSerializer.Serialize(publication, _indentedSerializerOptions),
+                await _fileUtil.Write(prepareStatePath, JsonSerializer.Serialize(publication, AotJsonContext.Get<PreparedPublication>(_indentedSerializerOptions)),
                     cancellationToken: cancellationToken);
                 retainPreparedRepository = true;
                 _logger.LogInformation("Package prepared. Publication state: {StatePath}. Repository retained at {RepositoryDirectory}.",
@@ -360,7 +360,7 @@ public sealed class TimeZonesRunner
             return null;
 
         await using FileStream stream = _fileUtil.OpenRead(path);
-        ExtractManifest? manifest = await JsonSerializer.DeserializeAsync<ExtractManifest>(stream, _caseInsensitiveSerializerOptions, cancellationToken);
+        ExtractManifest? manifest = await JsonSerializer.DeserializeAsync(stream, AotJsonContext.Get<ExtractManifest>(_caseInsensitiveSerializerOptions), cancellationToken);
 
         return manifest?.Extracts.FirstOrDefault(x => string.Equals(x.CacheFileName, extract.CacheFileName, StringComparison.Ordinal))?.Md5;
     }
@@ -379,7 +379,7 @@ public sealed class TimeZonesRunner
             Extracts = [extract with { Md5 = upstreamMd5 }]
         };
 
-        string json = JsonSerializer.Serialize(manifest, _indentedSerializerOptions);
+        string json = JsonSerializer.Serialize(manifest, AotJsonContext.Get<ExtractManifest>(_indentedSerializerOptions));
         await _fileUtil.Write(path, json + Environment.NewLine, cancellationToken: cancellationToken);
     }
 
@@ -409,7 +409,7 @@ public sealed class TimeZonesRunner
             string path = ResolvePath(repoRoot, options.ExtractListPath);
             await using FileStream stream = _fileUtil.OpenRead(path);
             ExtractManifest? manifest =
-                await JsonSerializer.DeserializeAsync<ExtractManifest>(stream, _caseInsensitiveSerializerOptions, cancellationToken);
+                await JsonSerializer.DeserializeAsync(stream, AotJsonContext.Get<ExtractManifest>(_caseInsensitiveSerializerOptions), cancellationToken);
             return manifest ?? throw new InvalidOperationException($"Extract manifest '{path}' could not be read.");
         }
 
