@@ -34,7 +34,7 @@ public sealed class TimeZonesRunnerIntegrationTests : HostedUnitTest
     }
 
     [Test]
-    public async Task Antarctica_pbf_runs_through_pyosmium_pipeline(CancellationToken cancellationToken)
+    public async ValueTask Antarctica_pbf_runs_through_pyosmium_pipeline(CancellationToken cancellationToken)
     {
         if (!string.Equals(Environment.GetEnvironmentVariable(_runIntegrationEnvironmentVariable), "true", StringComparison.OrdinalIgnoreCase))
             return;
