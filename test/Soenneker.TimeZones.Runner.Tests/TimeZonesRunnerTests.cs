@@ -1,12 +1,13 @@
 using System.Threading.Tasks;
 using Soenneker.TimeZones.Runner.Configuration;
+using System.Threading;
 
 namespace Soenneker.TimeZones.Runner.Tests;
 
 public sealed class TimeZonesRunnerTests
 {
     [Test]
-    public async ValueTask Defaults_to_world_scope()
+    public async ValueTask Defaults_to_world_scope(CancellationToken cancellationToken)
     {
         RunnerOptions options = RunnerOptionsParser.Parse([]);
 
@@ -21,7 +22,7 @@ public sealed class TimeZonesRunnerTests
     }
 
     [Test]
-    public async ValueTask Can_skip_md5_checking()
+    public async ValueTask Can_skip_md5_checking(CancellationToken cancellationToken)
     {
         RunnerOptions options = RunnerOptionsParser.Parse(["--skip-md5-checking"]);
 
@@ -29,7 +30,7 @@ public sealed class TimeZonesRunnerTests
     }
 
     [Test]
-    public async ValueTask Can_disable_pyosmium_prefilter()
+    public async ValueTask Can_disable_pyosmium_prefilter(CancellationToken cancellationToken)
     {
         RunnerOptions options = RunnerOptionsParser.Parse(["--disable-pyosmium-prefilter"]);
 
@@ -37,7 +38,7 @@ public sealed class TimeZonesRunnerTests
     }
 
     [Test]
-    public async ValueTask Can_exclude_admin_boundaries()
+    public async ValueTask Can_exclude_admin_boundaries(CancellationToken cancellationToken)
     {
         RunnerOptions options = RunnerOptionsParser.Parse(["--exclude-admin-boundaries"]);
 
@@ -45,7 +46,7 @@ public sealed class TimeZonesRunnerTests
     }
 
     [Test]
-    public async ValueTask Can_disable_python_auto_install()
+    public async ValueTask Can_disable_python_auto_install(CancellationToken cancellationToken)
     {
         RunnerOptions options = RunnerOptionsParser.Parse(["--disable-python-auto-install"]);
 

@@ -46,13 +46,13 @@ public sealed class TimeZonesRunnerIntegrationTests : HostedUnitTest
         IProcessUtil processUtil = Resolve<IProcessUtil>(true);
         ILoggerFactory loggerFactory = Resolve<ILoggerFactory>(true);
 
-        string integrationDirectory = await directoryUtil.CreateTempDirectory();
+        string integrationDirectory = await directoryUtil.CreateTempDirectory(cancellationToken: cancellationToken);
         string toolsDirectory = Path.Combine(integrationDirectory, "tools");
         string pbfPath = Path.Combine(integrationDirectory, "antarctica-latest.osm.pbf");
 
         try
         {
-            await Download(_antarcticaPbfUrl, pbfPath);
+            await Download(_antarcticaPbfUrl, pbfPath, cancellationToken: cancellationToken);
 
             var options = new RunnerOptions
             {
@@ -71,7 +71,7 @@ public sealed class TimeZonesRunnerIntegrationTests : HostedUnitTest
             var prefilter = new PyosmiumPrefilter(fileUtil, directoryUtil, pythonUtil, processUtil, loggerFactory.CreateLogger<PyosmiumPrefilter>());
             string filteredPath = await prefilter.EnsureFilteredExtract(extract, pbfPath, options, toolsDirectory, force: true, cancellationToken);
 
-            await Assert.That(await fileUtil.Exists(filteredPath)).IsTrue();
+            await Assert.That(await fileUtil.Exists(filteredPath, cancellationToken: cancellationToken)).IsTrue();
 
             var extractor = new OsmTimeZoneExtractor(fileUtil, loggerFactory.CreateLogger<OsmTimeZoneExtractor>());
             var globalPaths = new Dictionary<string, Paths64>(StringComparer.Ordinal);
@@ -95,13 +95,13 @@ public sealed class TimeZonesRunnerIntegrationTests : HostedUnitTest
         }
     }
 
-    private async ValueTask Download(string url, string destinationPath)
+    private async ValueTask Download(string url, string destinationPath, CancellationToken cancellationToken = default)
     {
         using var client = new HttpClient();
         client.DefaultRequestHeaders.UserAgent.ParseAdd("Soenneker.TimeZones.Runner.Tests");
 
-        await using Stream responseStream = await client.GetStreamAsync(url);
+        await using Stream responseStream = await client.GetStreamAsync(url, cancellationToken: cancellationToken);
         await using FileStream destinationStream = _fileUtil.OpenWrite(destinationPath);
-        await responseStream.CopyToAsync(destinationStream);
+        await responseStream.CopyToAsync(destinationStream, cancellationToken: cancellationToken);
     }
 }
