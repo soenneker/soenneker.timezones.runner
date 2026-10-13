@@ -96,7 +96,7 @@ jobs:
       # Request the one-hour credential only after downloading, filtering and packing.
       - name: Log in to NuGet
         if: steps.prepare.outputs.ready == 'true'
-        uses: soenneker/nuget-resilient-login@v6
+        uses: soenneker/nuget-resilient-login@v7
         id: nuget-login
         with:
           user: soenneker
