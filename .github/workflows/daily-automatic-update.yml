@@ -22,7 +22,7 @@ jobs:
       - name: Setting up build version
         run: |
           version=$(($GITHUB_RUN_NUMBER))
-          echo "BUILD_VERSION=4.0.$version" >> ${GITHUB_ENV}
+          echo "BUILD_VERSION=11.0.$version" >> ${GITHUB_ENV}
 
       - name: Free disk space
         run: |
@@ -52,7 +52,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.402
+          dotnet-version: 11.0.100-rc.3.26522.148
 
       - name: Install dependencies with retry
         run: |
@@ -81,7 +81,7 @@ jobs:
       - name: Generate and pack dataset
         id: prepare
         run: |
-          dotnet run --project src/Soenneker.TimeZones.Runner/Soenneker.TimeZones.Runner.csproj --no-build --no-restore --framework net10.0 -c Release -- --prepare-publication artifacts/publication.json
+          dotnet run --project src/Soenneker.TimeZones.Runner/Soenneker.TimeZones.Runner.csproj --no-build --no-restore --framework net11.0 -c Release -- --prepare-publication artifacts/publication.json
           if [ -f artifacts/publication.json ]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
             echo "package_path=$(jq -r '.PackagePath' artifacts/publication.json)" >> "$GITHUB_OUTPUT"
@@ -95,7 +95,7 @@ jobs:
       # Request the one-hour credential only after downloading, filtering and packing.
       - name: Publish prepared dataset
         if: steps.prepare.outputs.ready == 'true'
-        run: dotnet run --project src/Soenneker.TimeZones.Runner/Soenneker.TimeZones.Runner.csproj --no-build --no-restore --framework net10.0 -c Release -- --publish-publication artifacts/publication.json
+        run: dotnet run --project src/Soenneker.TimeZones.Runner/Soenneker.TimeZones.Runner.csproj --no-build --no-restore --framework net11.0 -c Release -- --publish-publication artifacts/publication.json
         env:
           GH__USERNAME: ${{ secrets.GH__USERNAME }}
           GH__TOKEN: ${{ secrets.GH__TOKEN }}
