@@ -27,11 +27,11 @@
         <PackageReference Include="Microsoft.Extensions.Hosting" Version="11.0.0" />
         <PackageReference Include="Clipper2" Version="2.0.0" />
         <PackageReference Include="OsmSharp" Version="6.2.0" />
-        <PackageReference Include="Soenneker.Python.Util" Version="11.0.498" />
-        <PackageReference Include="Soenneker.Git.Util" Version="11.0.3896" />
-        <PackageReference Include="Soenneker.GitHub.Repositories.Releases" Version="11.0.1144" />
+        <PackageReference Include="Soenneker.Python.Util" Version="11.0.499" />
+        <PackageReference Include="Soenneker.Git.Util" Version="11.0.3898" />
+        <PackageReference Include="Soenneker.GitHub.Repositories.Releases" Version="11.0.1147" />
         <PackageReference Include="Soenneker.Extensions.LoggerConfiguration" Version="11.0.1464" />
-        <PackageReference Include="Soenneker.Utils.Dotnet.NuGet" Version="11.0.2173" />
-        <PackageReference Include="Soenneker.Utils.Environment" Version="11.0.797" />
+        <PackageReference Include="Soenneker.Utils.Dotnet.NuGet" Version="11.0.2175" />
+        <PackageReference Include="Soenneker.Utils.Environment" Version="11.0.798" />
 </ItemGroup>
 </Project>
